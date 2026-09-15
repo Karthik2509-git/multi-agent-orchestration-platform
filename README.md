@@ -9,7 +9,7 @@ A production-grade, modular Multi-Agent AI Orchestration Platform designed to co
 The vision of this platform is to provide an enterprise-ready blueprint and runtime for multi-agent systems. It demonstrates how autonomous agents, supervised routing, external tool integrations, and human oversight can be orchestrated reliably at scale with rigorous observability, evaluation, and security guardrails.
 
 ### What the Platform Will Eventually Demonstrate
-- **LLM Integration**: Unified multi-provider abstractions (OpenAI, Anthropic, Google Gemini, local models).
+- **LLM Integration**: Unified multi-provider abstractions (OpenRouter, Google Gemini, Groq, local models).
 - **Multi-Agent Architecture**: Hierarchical supervisor and specialist agents cooperating on complex objectives.
 - **LangGraph Orchestration**: State-machine-driven agent control loops, branching, cycles, and deterministic graph flows.
 - **Supervisor & Specialist Agents**: Domain-focused workers (research, code generation, analysis, verification).
@@ -25,7 +25,7 @@ The vision of this platform is to provide an enterprise-ready blueprint and runt
 - **Async / Background Task Execution**: Decoupled task queue processing for long-running workflows.
 - **Observability & Tracing**: Distributed tracing with OpenTelemetry, span tracking for LLM calls, and metrics dashboards.
 - **Evaluation**: Agent benchmark suites, output quality metrics, and automated regression testing.
-- **Guardrails & Security**: Prompt injection sanitization, PII filtering, SSRF protection, and policy enforcement.
+- **Guardrails & Security**: Prompt injection sanitization, PII filtering, SSRF/DNS-rebinding protection, and policy enforcement.
 - **Infrastructure**: FastAPI, PostgreSQL, Redis, Docker, Automated Testing, and CI/CD pipelines.
 
 ---
@@ -56,12 +56,14 @@ multi-agent-orchestration-platform/
 │       │       ├── api.py       # Aggregation router for v1
 │       │       └── endpoints/
 │       │           ├── health.py # Health check endpoint (/api/v1/health)
-│       │           └── agent.py  # Agent run endpoint (/api/v1/agent/run)
+│       │           ├── agent.py  # Agent run endpoint (/api/v1/agent/run)
+│       │           └── llm.py    # Provider status endpoint (/api/v1/llm/providers)
 │       ├── models/              # Pydantic schemas and domain entities
 │       │   └── schemas/
 │       │       ├── health.py    # Health check data contracts
 │       │       ├── agent.py     # Agent request and response contracts
-│       │       └── llm.py       # LLM provider response and tool call contracts
+│       │       ├── llm.py       # LLM provider response and tool call contracts
+│       │       └── provider.py  # Provider configuration status schema
 │       ├── services/            # Reusable business logic services
 │       │   ├── health.py        # Shared health status generator
 │       │   └── agent_service.py # Agent task execution and tool registry factory
@@ -76,8 +78,11 @@ multi-agent-orchestration-platform/
 │       │   ├── base.py          # LLMProvider abstract interface
 │       │   ├── factory.py       # LLM provider dependency injection factory
 │       │   └── providers/
-│       │       ├── openai.py    # OpenAI AsyncOpenAI provider
-│       │       └── mock.py      # MockLLMProvider for offline deterministic tests
+│       │       ├── openrouter.py # OpenRouter provider (OpenAI-compatible async client)
+│       │       ├── gemini.py     # Google Gemini provider (official google-genai SDK)
+│       │       ├── groq.py       # Groq provider (ultra-fast LPU inference)
+│       │       ├── mock.py       # MockLLMProvider for offline deterministic tests
+│       │       └── openai.py     # Optional legacy OpenAI provider
 │       ├── orchestration/       # LangGraph state graphs and supervisors (Phase 3+)
 │       ├── mcp/                 # Model Context Protocol clients (Phase 4+)
 │       ├── rag/                 # Retrieval-Augmented Generation pipelines (Phase 5+)
@@ -85,14 +90,19 @@ multi-agent-orchestration-platform/
 │       ├── db/                  # Database connections and repositories (Phase 5+)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (31 automated tests)
+└── tests/                       # Pytest test suite (56 automated tests)
     ├── conftest.py              # Test client fixtures and environment overrides
     ├── test_health.py           # Health endpoint integration tests
     ├── test_calculator.py       # Calculator tool safety and arithmetic tests
     ├── test_http_tool.py        # HTTP tool SSRF, DNS-rebinding, and size tests
     ├── test_tool_registry.py    # ToolRegistry registration and execution tests
     ├── test_agent.py            # ToolCallingAgent loop and error recovery tests
-    └── test_agent_api.py        # POST /api/v1/agent/run API endpoint tests
+    ├── test_agent_api.py        # POST /api/v1/agent/run API endpoint tests
+    ├── test_openrouter_provider.py # OpenRouter provider normalization & error tests
+    ├── test_groq_provider.py    # Groq provider normalization & error tests
+    ├── test_gemini_provider.py  # Gemini SDK normalization & tool mapping tests
+    ├── test_llm_factory_and_status.py # Factory selection and provider status tests
+    └── test_agent_multiprovider.py # Cross-provider agent tool execution tests
 ```
 
 ---
@@ -105,73 +115,115 @@ multi-agent-orchestration-platform/
 | **FastAPI Core & Health** | ✅ Completed (Phase 1) | Application factory, lifespan events, CORS middleware, `/health` and `/api/v1/health` |
 | **Configuration** | ✅ Completed (Phase 1) | Pydantic Settings (`BaseSettings`), environment variable validation, `.env.example` |
 | **Containerization** | ✅ Completed (Phase 1) | Multi-stage Dockerfile (Python 3.12-slim, non-root user), Docker Compose with Postgres and Redis |
-| **LLM Provider Abstraction** | ✅ Completed (Phase 2) | Clean `LLMProvider` interface with `OpenAILLMProvider` and `MockLLMProvider` |
-| **Tool Registry & Safety** | ✅ Completed (Phase 2) | `ToolRegistry`, AST-based `calculator`, and SSRF-hardened `http_get` tool |
+| **Tool Registry & Safety** | ✅ Completed (Phase 2) | `ToolRegistry`, AST-based `calculator`, and SSRF/DNS-rebinding hardened `http_get` tool |
 | **Single AI Agent** | ✅ Completed (Phase 2) | `ToolCallingAgent` with decision loop, validation, error recovery, and iteration ceiling |
 | **Agent API** | ✅ Completed (Phase 2) | `POST /api/v1/agent/run` with structured responses, tool audit trails, and execution timing |
-| **Test Suite** | ✅ Completed (Phase 2) | 31 unit and integration tests (zero live API key required for test suite) |
+| **Multi-Provider LLM Infrastructure** | ✅ Completed (Phase 2.5) | Provider-agnostic architecture: OpenRouter, Google Gemini, Groq, Mock, and OpenAI |
+| **Provider Status Endpoint** | ✅ Completed (Phase 2.5) | `GET /api/v1/llm/providers` exposing active provider and configuration readiness |
+| **Test Suite** | ✅ Completed (Phase 2.5) | 56 unit and integration tests (zero paid API keys required for testing) |
 | **Orchestration / LangGraph** | ⏳ Pending (Phase 3) | Deferred to Phase 3 |
 | **MCP Tool Ecosystem** | ⏳ Pending (Phase 4) | Deferred to Phase 4 |
 | **RAG & Memory** | ⏳ Pending (Phases 5-6) | Deferred to respective phases |
 
 ---
 
-## 🤖 Phase 2: LLM Integration & Tool-Calling Agent
+## 🔌 Phase 2.5: Multi-Provider LLM Infrastructure
 
-Phase 2 introduces a single autonomous AI agent featuring real tool calling, strong security boundaries, and provider isolation:
+Phase 2.5 establishes a provider-agnostic infrastructure. The `ToolCallingAgent` has zero provider-specific logic and communicates exclusively through the abstract `LLMProvider` interface.
 
 ```
-User Task
-   │
-   ▼
-[POST /api/v1/agent/run]
-   │
-   ▼
-[Agent Service] ──► [ToolRegistry] (Calculator, Safe HTTP GET)
-   │
-   ▼
-[ToolCallingAgent Loop]
-   │
-   ├─► 1. Send conversation history + tool schemas to LLMProvider
-   │
-   ├─► 2. LLM decides: Tool Call needed or Final Answer?
-   │        │
-   │        ├─► If Tool Call:
-   │        │     - Validate tool name against registry
-   │        │     - Validate arguments
-   │        │     - Execute tool safely
-   │        │     - Record duration & result
-   │        │     - Append tool output to history
-   │        │     - Re-prompt LLM (repeat up to max iterations)
-   │        │
-   │        └─► If Final Answer:
-   │              - Record execution duration
-   │              - Return structured AgentRunResponse
-   ▼
-FastAPI JSON Response
+                    ToolCallingAgent
+                           │
+                      LLMProvider
+                           │
+          ┌────────────────┼────────────────┬────────────────┐
+          ▼                ▼                ▼                ▼
+     OpenRouter          Gemini            Groq             Mock
+  (openrouter/free) (gemini-2.5-flash) (llama-3.3-70b)   (Offline Tests)
 ```
 
-### 1. LLM Provider Architecture
-All model interaction is mediated through the `LLMProvider` interface (`src/app/llm/base.py`). This prevents vendor lock-in and allows seamless switching between:
-- **`OpenAILLMProvider`**: Live OpenAI integration using `AsyncOpenAI` with model name configurable via `OPENAI_MODEL` (`gpt-4o-mini` by default).
-- **`MockLLMProvider`**: Deterministic offline provider for tests that supports canned responses or programmable mock handlers.
+### Supported Providers
 
-### 2. Built-In Tools & Security Hardening
+1. **OpenRouter (`openrouter`)** — *Default*:
+   - Uses OpenAI-compatible async client with base URL `https://openrouter.ai/api/v1`.
+   - Includes OpenRouter recommended headers (`HTTP-Referer`, `X-Title`).
+   - Configurable model via `OPENROUTER_MODEL` (e.g. `openrouter/free` or `meta-llama/llama-3.3-70b-instruct:free`).
+2. **Google Gemini (`gemini`)**:
+   - Uses the official `google-genai` SDK (`genai.Client`).
+   - Maps user messages to Gemini `user` content, assistant text/calls to `model` content, and tool results to `function_response` content.
+   - Translates tool definitions into Gemini `FunctionDeclaration` objects.
+   - Configurable model via `GEMINI_MODEL` (e.g. `gemini-2.5-flash`).
+3. **Groq (`groq`)**:
+   - Uses OpenAI-compatible async client with base URL `https://api.groq.com/openai/v1`.
+   - Ultra-low latency LPU inference on free-tier open models.
+   - Configurable model via `GROQ_MODEL` (e.g. `llama-3.3-70b-versatile`).
+4. **Mock (`mock`)**:
+   - Requires zero API keys or network calls; used for deterministic testing of tool cycles and error states.
+5. **OpenAI (`openai`)**:
+   - Maintained as an optional legacy provider; never required for running the platform.
+
+### Zero Paid Requirement & Free-Tier Development
+The platform is designed to be fully runnable with zero paid API providers. All model identifiers are environment-variable driven:
+- `LLM_PROVIDER`: Sets the active provider (`openrouter`, `gemini`, `groq`, `mock`, `openai`).
+- `OPENROUTER_MODEL`: Model identifier on OpenRouter.
+- `GEMINI_MODEL`: Model identifier on Google Gemini.
+- `GROQ_MODEL`: Model identifier on Groq.
+
+Missing credentials on *inactive* providers will never cause import or runtime failures. If `LLM_PROVIDER=openrouter` is active, empty Gemini and Groq keys are completely ignored.
+
+---
+
+## 📡 Provider Status API Endpoint
+
+Inspect provider configuration and active status:
+```bash
+curl http://127.0.0.1:8000/api/v1/llm/providers
+```
+
+Example response (zero credentials exposed):
+```json
+{
+  "active_provider": "openrouter",
+  "providers": {
+    "openrouter": {
+      "configured": true,
+      "model": "openrouter/free"
+    },
+    "gemini": {
+      "configured": false,
+      "model": "gemini-2.5-flash"
+    },
+    "groq": {
+      "configured": false,
+      "model": "llama-3.3-70b-versatile"
+    },
+    "mock": {
+      "configured": true,
+      "model": "mock-model"
+    },
+    "openai": {
+      "configured": false,
+      "model": "gpt-4o-mini"
+    }
+  }
+}
+```
+
+---
+
+## 🤖 Built-In Tools & Security Hardening
+
 - **Calculator Tool (`calculator`)**:
-  - Uses Python's Abstract Syntax Tree (`ast`) module to evaluate expressions.
+  - Uses Python's Abstract Syntax Tree (`ast`) module to safely parse and evaluate arithmetic expressions.
   - Strictly disallows `eval()` or `exec()`.
   - Blocks functions, imports, variables, and attribute access.
   - Enforces power exponent ceilings to prevent CPU/memory exhaustion denial-of-service attacks.
 - **Safe HTTP GET Tool (`http_get`)**:
   - **SSRF Prevention**: Resolves hostnames before connecting and validates all resolved IP addresses against private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), multicast, and reserved ranges.
   - **DNS-Rebinding Protection**: Validates every IP resolved from DNS to ensure no attacker-controlled host points to private internal infrastructure.
-  - **Domain Allowlist**: Only permits domains explicitly listed in `ALLOWED_HTTP_DOMAINS`.
+  - **Domain Allowlist**: Only permits domains explicitly listed in `ALLOWED_HTTP_DOMAINS` (`httpbin.org`, `api.github.com`).
   - **Redirect Protection**: Automatic redirects are disabled (`follow_redirects=False`) to prevent redirect-based SSRF.
-  - **Response Size Cap**: Reads up to `TOOL_HTTP_MAX_SIZE_BYTES` (default 100 KB) in chunks and truncates safely to prevent context window exhaustion.
-
-### 3. Agent Execution Limits & Error Recovery
-- **Iteration Ceiling**: Configurable via `AGENT_MAX_ITERATIONS` (default 5) to prevent infinite loops.
-- **Tool Error Isolation**: Exceptions inside tools are captured and returned to the model as error messages, allowing the model to recover and explain issues gracefully.
+  - **Response Size Cap**: Streams response chunks up to `TOOL_HTTP_MAX_SIZE_BYTES` (default 100 KB) and truncates safely.
 
 ---
 
@@ -181,7 +233,7 @@ All model interaction is mediated through the `LLMProvider` interface (`src/app/
 - **Web Framework**: [FastAPI](https://fastapi.tiangolo.com/) (0.110+)
 - **ASGI Server**: [Uvicorn](https://www.uvicorn.org/) (standard)
 - **Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/latest/) & [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
-- **LLM Integration**: [OpenAI Python SDK](https://github.com/openai/openai-python)
+- **LLM Integrations**: [OpenAI Python SDK](https://github.com/openai/openai-python) (for OpenRouter & Groq), [Google GenAI SDK](https://github.com/googleapis/python-genai) (for Gemini)
 - **HTTP Client**: [HTTPX](https://www.python-httpx.org/)
 - **Testing**: [Pytest](https://docs.pytest.org/), [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
 - **Code Quality**: [Ruff](https://astral.sh/ruff)
@@ -226,10 +278,24 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-To test with live OpenAI models, set your `OPENAI_API_KEY` in `.env`:
+Choose your active provider in `.env`:
 ```bash
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4o-mini
+# Select active provider
+LLM_PROVIDER=openrouter
+
+# OpenRouter (Free-tier models available)
+OPENROUTER_API_KEY=your_key_here
+OPENROUTER_MODEL=openrouter/free
+
+# Or Google Gemini
+# LLM_PROVIDER=gemini
+# GEMINI_API_KEY=your_key_here
+# GEMINI_MODEL=gemini-2.5-flash
+
+# Or Groq
+# LLM_PROVIDER=groq
+# GROQ_API_KEY=your_key_here
+# GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 ---
@@ -268,7 +334,7 @@ Example response:
       "duration_ms": 0.42
     }
   ],
-  "model": "gpt-4o-mini",
+  "model": "openrouter/free",
   "status": "completed",
   "execution_time_seconds": 0.8532
 }
@@ -280,14 +346,14 @@ Example response:
 
 Execute the automated test suite with `pytest`:
 ```bash
-# Run all 31 tests
+# Run all 56 tests
 pytest -v
 
 # Run linting check
 ruff check .
 ```
 
-All unit and integration tests use `MockLLMProvider` and mock HTTP transports, allowing the entire suite to run with zero external API dependencies or API keys.
+All 56 unit and integration tests run offline with zero external API calls or paid credentials.
 
 ---
 
@@ -318,6 +384,8 @@ The platform is engineered iteratively phase-by-phase. Future development will f
   - Modular project structure, typing, configuration, health endpoints, containerization, and test harnesses.
 - **Phase 2 — LLM Integration & Tool-Calling Agent** *(Completed)*
   - Unified LLM provider abstraction, tool registry, safe AST calculator, SSRF-hardened HTTP tool, ToolCallingAgent, and REST endpoint.
+- **Phase 2.5 — Multi-Provider LLM Infrastructure** *(Completed)*
+  - Provider-agnostic architecture supporting OpenRouter, Google Gemini, Groq, and Mock with free-tier model support and provider status API.
 - **Phase 3 — Multi-Agent Orchestration with LangGraph**
   - StateGraph design, supervisor routing, specialist worker agents, and deterministic loop control.
 - **Phase 4 — MCP Tool Ecosystem**

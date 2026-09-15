@@ -136,6 +136,7 @@ class ToolCallingAgent:
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
+                            "name": tc.name,
                             "content": json.dumps(content_payload),
                         }
                     )

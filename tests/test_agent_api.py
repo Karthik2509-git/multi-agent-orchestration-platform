@@ -15,7 +15,6 @@ def test_agent_run_endpoint_validation_empty_task(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-
 def test_agent_run_endpoint_missing_api_key(client: TestClient) -> None:
     """Test that agent endpoint returns 503 if OPENAI_API_KEY is not configured."""
     with patch("src.app.services.agent_service.get_llm_provider") as mock_factory:

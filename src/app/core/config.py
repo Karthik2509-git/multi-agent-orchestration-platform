@@ -57,11 +57,30 @@ class Settings(BaseSettings):
     redis_password: str = ""
     redis_url: str = "redis://localhost:6379/0"
 
-    # LLM Settings (Phase 2)
+    # Multi-Provider LLM Settings (Phase 2.5)
+    llm_provider: str = "openrouter"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openrouter/free"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
     google_api_key: str = ""
+
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def validate_llm_provider(cls, v: str) -> str:
+        """Ensure provider is one of the supported providers."""
+        allowed = {"openrouter", "gemini", "groq", "mock", "openai"}
+        normalized = v.strip().lower()
+        if normalized not in allowed:
+            raise ValueError(
+                f"Unsupported LLM_PROVIDER '{v}'. Allowed providers: {sorted(allowed)}"
+            )
+        return normalized
 
     # Agent Settings (Phase 2)
     agent_max_iterations: int = 5
