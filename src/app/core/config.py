@@ -57,10 +57,30 @@ class Settings(BaseSettings):
     redis_password: str = ""
     redis_url: str = "redis://localhost:6379/0"
 
-    # LLM API Keys (Reserved for Future Phases)
+    # LLM Settings (Phase 2)
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
     google_api_key: str = ""
+
+    # Agent Settings (Phase 2)
+    agent_max_iterations: int = 5
+
+    # Tool Settings (Phase 2)
+    tool_http_timeout: float = 10.0
+    tool_http_max_size_bytes: int = 100_000
+    allowed_http_domains: Union[List[str], str] = [
+        "httpbin.org",
+        "api.github.com",
+    ]
+
+    @field_validator("allowed_http_domains", mode="before")
+    @classmethod
+    def assemble_allowed_http_domains(cls, v: Union[str, List[str]]) -> List[str]:
+        """Parse comma-separated string into a list of allowed HTTP domains."""
+        if isinstance(v, str):
+            return [domain.strip().lower() for domain in v.split(",") if domain.strip()]
+        return [d.lower() for d in v]
 
 
 @lru_cache

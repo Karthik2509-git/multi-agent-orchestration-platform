@@ -25,7 +25,7 @@ The vision of this platform is to provide an enterprise-ready blueprint and runt
 - **Async / Background Task Execution**: Decoupled task queue processing for long-running workflows.
 - **Observability & Tracing**: Distributed tracing with OpenTelemetry, span tracking for LLM calls, and metrics dashboards.
 - **Evaluation**: Agent benchmark suites, output quality metrics, and automated regression testing.
-- **Guardrails & Security**: Prompt injection sanitization, PII filtering, and policy enforcement.
+- **Guardrails & Security**: Prompt injection sanitization, PII filtering, SSRF protection, and policy enforcement.
 - **Infrastructure**: FastAPI, PostgreSQL, Redis, Docker, Automated Testing, and CI/CD pipelines.
 
 ---
@@ -41,12 +41,12 @@ multi-agent-orchestration-platform/
 ├── Dockerfile                   # Production-grade Python 3.12-slim container
 ├── docker-compose.yml           # Backend, PostgreSQL, and Redis infrastructure
 ├── pyproject.toml               # Modern Python packaging and tool configuration
-├── requirements.txt             # Minimal pinned production dependencies
+├── requirements.txt             # Pinned production dependencies
 ├── requirements-dev.txt         # Development, testing, and linting dependencies
 ├── README.md                    # Platform documentation and roadmap
 ├── src/
 │   └── app/
-│       ├── __init__.py          # Package initialization
+│       ├── __init__.py          # Package initialization (__version__ = "0.1.0")
 │       ├── main.py              # Application factory, lifespan, CORS, and root routes
 │       ├── core/                # Typed configuration & centralized logging
 │       │   ├── config.py        # Pydantic Settings management
@@ -55,25 +55,44 @@ multi-agent-orchestration-platform/
 │       │   └── v1/
 │       │       ├── api.py       # Aggregation router for v1
 │       │       └── endpoints/
-│       │           └── health.py # Health check endpoint (/api/v1/health)
+│       │           ├── health.py # Health check endpoint (/api/v1/health)
+│       │           └── agent.py  # Agent run endpoint (/api/v1/agent/run)
 │       ├── models/              # Pydantic schemas and domain entities
 │       │   └── schemas/
-│       │       └── health.py    # Health check data contracts
+│       │       ├── health.py    # Health check data contracts
+│       │       ├── agent.py     # Agent request and response contracts
+│       │       └── llm.py       # LLM provider response and tool call contracts
 │       ├── services/            # Reusable business logic services
-│       │   └── health.py        # Shared health status generator
-│       ├── agents/              # Agent definitions and base interfaces (Phase 2+)
+│       │   ├── health.py        # Shared health status generator
+│       │   └── agent_service.py # Agent task execution and tool registry factory
+│       ├── agents/              # Agent layer
+│       │   └── tool_calling_agent.py # Single AI agent with tool loop
+│       ├── tools/               # Agent tool implementations & registry
+│       │   ├── base.py          # BaseTool and ToolResult abstractions
+│       │   ├── registry.py      # Tool discovery and execution registry
+│       │   ├── calculator.py    # Safe AST-based arithmetic calculator
+│       │   └── http_tool.py     # Safe HTTP GET with SSRF and DNS-rebinding protection
+│       ├── llm/                 # Unified LLM provider adapters
+│       │   ├── base.py          # LLMProvider abstract interface
+│       │   ├── factory.py       # LLM provider dependency injection factory
+│       │   └── providers/
+│       │       ├── openai.py    # OpenAI AsyncOpenAI provider
+│       │       └── mock.py      # MockLLMProvider for offline deterministic tests
 │       ├── orchestration/       # LangGraph state graphs and supervisors (Phase 3+)
-│       ├── tools/               # Agent tool implementations & registry (Phase 2+)
 │       ├── mcp/                 # Model Context Protocol clients (Phase 4+)
 │       ├── rag/                 # Retrieval-Augmented Generation pipelines (Phase 5+)
 │       ├── memory/              # Short-term and episodic memory systems (Phase 6+)
-│       ├── llm/                 # Unified LLM provider adapters (Phase 2+)
 │       ├── db/                  # Database connections and repositories (Phase 5+)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite
+└── tests/                       # Pytest test suite (31 automated tests)
     ├── conftest.py              # Test client fixtures and environment overrides
-    └── test_health.py           # Health endpoint integration tests
+    ├── test_health.py           # Health endpoint integration tests
+    ├── test_calculator.py       # Calculator tool safety and arithmetic tests
+    ├── test_http_tool.py        # HTTP tool SSRF, DNS-rebinding, and size tests
+    ├── test_tool_registry.py    # ToolRegistry registration and execution tests
+    ├── test_agent.py            # ToolCallingAgent loop and error recovery tests
+    └── test_agent_api.py        # POST /api/v1/agent/run API endpoint tests
 ```
 
 ---
@@ -83,24 +102,89 @@ multi-agent-orchestration-platform/
 | Component | Status | Details |
 | :--- | :--- | :--- |
 | **Foundation & Architecture** | ✅ Completed (Phase 1) | Modular directory structure, package hierarchy, and typing baseline |
-| **FastAPI Core** | ✅ Completed (Phase 1) | Application factory, lifespan events, CORS middleware, `/health` and `/api/v1/health` |
+| **FastAPI Core & Health** | ✅ Completed (Phase 1) | Application factory, lifespan events, CORS middleware, `/health` and `/api/v1/health` |
 | **Configuration** | ✅ Completed (Phase 1) | Pydantic Settings (`BaseSettings`), environment variable validation, `.env.example` |
 | **Containerization** | ✅ Completed (Phase 1) | Multi-stage Dockerfile (Python 3.12-slim, non-root user), Docker Compose with Postgres and Redis |
-| **Test Suite** | ✅ Completed (Phase 1) | Pytest with synchronous and asynchronous test clients (`httpx`, `TestClient`) |
-| **LLM & Agents** | ⏳ Pending (Phase 2+) | Deferred to Phase 2 to prevent premature complexity |
-| **Orchestration / LangGraph** | ⏳ Pending (Phase 3+) | Deferred to Phase 3 |
-| **MCP Tool Ecosystem** | ⏳ Pending (Phase 4+) | Deferred to Phase 4 |
+| **LLM Provider Abstraction** | ✅ Completed (Phase 2) | Clean `LLMProvider` interface with `OpenAILLMProvider` and `MockLLMProvider` |
+| **Tool Registry & Safety** | ✅ Completed (Phase 2) | `ToolRegistry`, AST-based `calculator`, and SSRF-hardened `http_get` tool |
+| **Single AI Agent** | ✅ Completed (Phase 2) | `ToolCallingAgent` with decision loop, validation, error recovery, and iteration ceiling |
+| **Agent API** | ✅ Completed (Phase 2) | `POST /api/v1/agent/run` with structured responses, tool audit trails, and execution timing |
+| **Test Suite** | ✅ Completed (Phase 2) | 31 unit and integration tests (zero live API key required for test suite) |
+| **Orchestration / LangGraph** | ⏳ Pending (Phase 3) | Deferred to Phase 3 |
+| **MCP Tool Ecosystem** | ⏳ Pending (Phase 4) | Deferred to Phase 4 |
 | **RAG & Memory** | ⏳ Pending (Phases 5-6) | Deferred to respective phases |
 
 ---
 
-## 🛠️ Tech Stack (Phase 1 Baseline)
+## 🤖 Phase 2: LLM Integration & Tool-Calling Agent
+
+Phase 2 introduces a single autonomous AI agent featuring real tool calling, strong security boundaries, and provider isolation:
+
+```
+User Task
+   │
+   ▼
+[POST /api/v1/agent/run]
+   │
+   ▼
+[Agent Service] ──► [ToolRegistry] (Calculator, Safe HTTP GET)
+   │
+   ▼
+[ToolCallingAgent Loop]
+   │
+   ├─► 1. Send conversation history + tool schemas to LLMProvider
+   │
+   ├─► 2. LLM decides: Tool Call needed or Final Answer?
+   │        │
+   │        ├─► If Tool Call:
+   │        │     - Validate tool name against registry
+   │        │     - Validate arguments
+   │        │     - Execute tool safely
+   │        │     - Record duration & result
+   │        │     - Append tool output to history
+   │        │     - Re-prompt LLM (repeat up to max iterations)
+   │        │
+   │        └─► If Final Answer:
+   │              - Record execution duration
+   │              - Return structured AgentRunResponse
+   ▼
+FastAPI JSON Response
+```
+
+### 1. LLM Provider Architecture
+All model interaction is mediated through the `LLMProvider` interface (`src/app/llm/base.py`). This prevents vendor lock-in and allows seamless switching between:
+- **`OpenAILLMProvider`**: Live OpenAI integration using `AsyncOpenAI` with model name configurable via `OPENAI_MODEL` (`gpt-4o-mini` by default).
+- **`MockLLMProvider`**: Deterministic offline provider for tests that supports canned responses or programmable mock handlers.
+
+### 2. Built-In Tools & Security Hardening
+- **Calculator Tool (`calculator`)**:
+  - Uses Python's Abstract Syntax Tree (`ast`) module to evaluate expressions.
+  - Strictly disallows `eval()` or `exec()`.
+  - Blocks functions, imports, variables, and attribute access.
+  - Enforces power exponent ceilings to prevent CPU/memory exhaustion denial-of-service attacks.
+- **Safe HTTP GET Tool (`http_get`)**:
+  - **SSRF Prevention**: Resolves hostnames before connecting and validates all resolved IP addresses against private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), multicast, and reserved ranges.
+  - **DNS-Rebinding Protection**: Validates every IP resolved from DNS to ensure no attacker-controlled host points to private internal infrastructure.
+  - **Domain Allowlist**: Only permits domains explicitly listed in `ALLOWED_HTTP_DOMAINS`.
+  - **Redirect Protection**: Automatic redirects are disabled (`follow_redirects=False`) to prevent redirect-based SSRF.
+  - **Response Size Cap**: Reads up to `TOOL_HTTP_MAX_SIZE_BYTES` (default 100 KB) in chunks and truncates safely to prevent context window exhaustion.
+
+### 3. Agent Execution Limits & Error Recovery
+- **Iteration Ceiling**: Configurable via `AGENT_MAX_ITERATIONS` (default 5) to prevent infinite loops.
+- **Tool Error Isolation**: Exceptions inside tools are captured and returned to the model as error messages, allowing the model to recover and explain issues gracefully.
+
+---
+
+## 🛠️ Tech Stack
 
 - **Language**: Python 3.12 baseline (supports Python >=3.11)
 - **Web Framework**: [FastAPI](https://fastapi.tiangolo.com/) (0.110+)
 - **ASGI Server**: [Uvicorn](https://www.uvicorn.org/) (standard)
 - **Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/latest/) & [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
-- **Testing**: [Pytest](https://docs.pytest.org/), [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio), [HTTPX](https://www.python-httpx.org/)
+- **LLM Integration**: [OpenAI Python SDK](https://github.com/openai/openai-python)
+- **HTTP Client**: [HTTPX](https://www.python-httpx.org/)
+- **Testing**: [Pytest](https://docs.pytest.org/), [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
+- **Code Quality**: [Ruff](https://astral.sh/ruff)
 - **Infrastructure**: [Docker](https://www.docker.com/), [Docker Compose](https://docs.docker.com/compose/)
 - **Planned Infrastructure**: PostgreSQL 16, Redis 7
 
@@ -142,7 +226,11 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Review and adjust `.env` parameters as needed.
+To test with live OpenAI models, set your `OPENAI_API_KEY` in `.env`:
+```bash
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4o-mini
+```
 
 ---
 
@@ -158,24 +246,31 @@ The interactive API documentation will be available at:
 - **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-### Health Check Verification
-Verify application health:
+### Running an Agent Task via API
 ```bash
-# Root health check
-curl http://127.0.0.1:8000/health
-
-# Versioned health check
-curl http://127.0.0.1:8000/api/v1/health
+curl -X POST http://127.0.0.1:8000/api/v1/agent/run \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Calculate (1000 / 8) + 42"}'
 ```
 
 Example response:
 ```json
 {
-  "status": "healthy",
-  "app_name": "Multi-Agent Orchestration Platform",
-  "version": "0.1.0",
-  "environment": "development",
-  "timestamp": "2026-09-15T06:30:00.000000Z"
+  "task": "Calculate (1000 / 8) + 42",
+  "answer": "The result of (1000 / 8) + 42 is 167.",
+  "tool_calls": [
+    {
+      "tool_name": "calculator",
+      "arguments": { "expression": "(1000 / 8) + 42" },
+      "result": { "expression": "(1000 / 8) + 42", "result": 167.0 },
+      "success": true,
+      "error": null,
+      "duration_ms": 0.42
+    }
+  ],
+  "model": "gpt-4o-mini",
+  "status": "completed",
+  "execution_time_seconds": 0.8532
 }
 ```
 
@@ -185,30 +280,25 @@ Example response:
 
 Execute the automated test suite with `pytest`:
 ```bash
-# Run all tests
+# Run all 31 tests
 pytest -v
 
-# Run with coverage summary (if coverage is installed)
-pytest --verbose --tb=short
+# Run linting check
+ruff check .
 ```
+
+All unit and integration tests use `MockLLMProvider` and mock HTTP transports, allowing the entire suite to run with zero external API dependencies or API keys.
 
 ---
 
 ## 🐳 Docker Instructions
 
 ### Build the Docker Image
-The container uses `python:3.12-slim` with a dedicated non-root user (`appuser`):
 ```bash
 docker build -t multi-agent-orchestration-platform:latest .
 ```
 
-### Run the Backend Container
-```bash
-docker run -d --name orchestrator_backend -p 8000:8000 multi-agent-orchestration-platform:latest
-```
-
 ### Run Full Infrastructure with Docker Compose
-Start the backend along with PostgreSQL and Redis:
 ```bash
 docker compose up -d --build
 ```
@@ -218,21 +308,16 @@ Check service status and health:
 docker compose ps
 ```
 
-Stop the services:
-```bash
-docker compose down
-```
-
 ---
 
 ## 🗺️ Future Development Phases
 
 The platform is engineered iteratively phase-by-phase. Future development will follow this roadmap:
 
-- **Phase 1 — Foundation & Project Architecture** *(Current)*
+- **Phase 1 — Foundation & Project Architecture** *(Completed)*
   - Modular project structure, typing, configuration, health endpoints, containerization, and test harnesses.
-- **Phase 2 — LLM Integration & Tool-Calling Agent**
-  - Multi-provider LLM abstraction, tool registry, function calling schemas, and single-agent execution loops.
+- **Phase 2 — LLM Integration & Tool-Calling Agent** *(Completed)*
+  - Unified LLM provider abstraction, tool registry, safe AST calculator, SSRF-hardened HTTP tool, ToolCallingAgent, and REST endpoint.
 - **Phase 3 — Multi-Agent Orchestration with LangGraph**
   - StateGraph design, supervisor routing, specialist worker agents, and deterministic loop control.
 - **Phase 4 — MCP Tool Ecosystem**
