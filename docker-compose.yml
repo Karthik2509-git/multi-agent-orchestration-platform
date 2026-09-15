@@ -1,0 +1,75 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orchestrator_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8000
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=orchestrator_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_dev_password
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres_dev_password@postgres:5432/orchestrator_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - orchestrator_net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: orchestrator_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orchestrator_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orchestrator_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: orchestrator_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  orchestrator_net:
+    driver: bridge
