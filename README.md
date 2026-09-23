@@ -55,19 +55,28 @@ multi-agent-orchestration-platform/
 │       │   └── v1/
 │       │       ├── api.py       # Aggregation router for v1
 │       │       └── endpoints/
-│       │           ├── health.py # Health check endpoint (/api/v1/health)
-│       │           ├── agent.py  # Agent run endpoint (/api/v1/agent/run)
-│       │           └── llm.py    # Provider status endpoint (/api/v1/llm/providers)
+│       │           ├── health.py        # Health check endpoint (/api/v1/health)
+│       │           ├── agent.py         # Agent run endpoint (/api/v1/agent/run)
+│       │           ├── llm.py           # Provider status endpoint (/api/v1/llm/providers)
+│       │           └── orchestration.py # Multi-agent orchestration (/api/v1/orchestration/run)
 │       ├── models/              # Pydantic schemas and domain entities
 │       │   └── schemas/
-│       │       ├── health.py    # Health check data contracts
-│       │       ├── agent.py     # Agent request and response contracts
-│       │       ├── llm.py       # LLM provider response and tool call contracts
-│       │       └── provider.py  # Provider configuration status schema
+│       │       ├── health.py        # Health check data contracts
+│       │       ├── agent.py         # Single agent request and response contracts
+│       │       ├── llm.py           # LLM provider response and tool call contracts
+│       │       ├── provider.py      # Provider configuration status schema
+│       │       └── orchestration.py # Multi-agent orchestration run contracts
 │       ├── services/            # Reusable business logic services
-│       │   ├── health.py        # Shared health status generator
-│       │   └── agent_service.py # Agent task execution and tool registry factory
+│       │   ├── health.py                # Shared health status generator
+│       │   ├── agent_service.py         # Agent task execution and tool registry factory
+│       │   └── orchestration_service.py # LangGraph workflow coordinator
 │       ├── agents/              # Agent layer
+│       │   ├── base.py               # BaseSpecializedAgent and AgentResult
+│       │   ├── supervisor.py         # SupervisorAgent with strict allowlist routing
+│       │   ├── research_agent.py     # ResearchAgent with safe URL retrieval
+│       │   ├── data_agent.py         # DataAgent with CalculatorTool integration
+│       │   ├── code_agent.py         # CodeAgent with zero-execution guarantee
+│       │   ├── final_agent.py        # FinalAgent aggregator and synthesizer
 │       │   └── tool_calling_agent.py # Single AI agent with tool loop
 │       ├── tools/               # Agent tool implementations & registry
 │       │   ├── base.py          # BaseTool and ToolResult abstractions
@@ -83,26 +92,33 @@ multi-agent-orchestration-platform/
 │       │       ├── groq.py       # Groq provider (ultra-fast LPU inference)
 │       │       ├── mock.py       # MockLLMProvider for offline deterministic tests
 │       │       └── openai.py     # Optional legacy OpenAI provider
-│       ├── orchestration/       # LangGraph state graphs and supervisors (Phase 3+)
+│       ├── orchestration/       # LangGraph multi-agent workflows
+│       │   ├── state.py         # Shared typed state (OrchestrationState)
+│       │   └── graph.py         # StateGraph assembly, worker routing & loop ceiling
 │       ├── mcp/                 # Model Context Protocol clients (Phase 4+)
 │       ├── rag/                 # Retrieval-Augmented Generation pipelines (Phase 5+)
 │       ├── memory/              # Short-term and episodic memory systems (Phase 6+)
 │       ├── db/                  # Database connections and repositories (Phase 5+)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (56 automated tests)
-    ├── conftest.py              # Test client fixtures and environment overrides
-    ├── test_health.py           # Health endpoint integration tests
-    ├── test_calculator.py       # Calculator tool safety and arithmetic tests
-    ├── test_http_tool.py        # HTTP tool SSRF, DNS-rebinding, and size tests
-    ├── test_tool_registry.py    # ToolRegistry registration and execution tests
-    ├── test_agent.py            # ToolCallingAgent loop and error recovery tests
-    ├── test_agent_api.py        # POST /api/v1/agent/run API endpoint tests
-    ├── test_openrouter_provider.py # OpenRouter provider normalization & error tests
-    ├── test_groq_provider.py    # Groq provider normalization & error tests
-    ├── test_gemini_provider.py  # Gemini SDK normalization & tool mapping tests
+└── tests/                       # Pytest test suite (76 automated tests)
+    ├── conftest.py                    # Test client fixtures and environment overrides
+    ├── test_health.py                 # Health endpoint integration tests
+    ├── test_calculator.py             # Calculator tool safety and arithmetic tests
+    ├── test_http_tool.py              # HTTP tool SSRF, DNS-rebinding, and size tests
+    ├── test_tool_registry.py          # ToolRegistry registration and execution tests
+    ├── test_agent.py                  # ToolCallingAgent loop and error recovery tests
+    ├── test_agent_api.py              # POST /api/v1/agent/run API endpoint tests
+    ├── test_openrouter_provider.py    # OpenRouter provider normalization & error tests
+    ├── test_groq_provider.py          # Groq provider normalization & error tests
+    ├── test_gemini_provider.py        # Gemini SDK normalization & tool mapping tests
     ├── test_llm_factory_and_status.py # Factory selection and provider status tests
-    └── test_agent_multiprovider.py # Cross-provider agent tool execution tests
+    ├── test_agent_multiprovider.py    # Cross-provider agent tool execution tests
+    ├── test_orchestration_state.py    # OrchestrationState typed structure tests
+    ├── test_supervisor.py             # Strict allowlist parsing and fallback tests
+    ├── test_specialized_agents.py     # Research, Data, Code, and Final agent tests
+    ├── test_orchestration_graph.py    # LangGraph flows, loop ceiling, and state updates
+    └── test_orchestration_api.py      # POST /api/v1/orchestration/run endpoint tests
 ```
 
 ---
@@ -120,8 +136,8 @@ multi-agent-orchestration-platform/
 | **Agent API** | ✅ Completed (Phase 2) | `POST /api/v1/agent/run` with structured responses, tool audit trails, and execution timing |
 | **Multi-Provider LLM Infrastructure** | ✅ Completed (Phase 2.5) | Provider-agnostic architecture: OpenRouter, Google Gemini, Groq, Mock, and OpenAI |
 | **Provider Status Endpoint** | ✅ Completed (Phase 2.5) | `GET /api/v1/llm/providers` exposing active provider and configuration readiness |
-| **Test Suite** | ✅ Completed (Phase 2.5) | 56 unit and integration tests (zero paid API keys required for testing) |
-| **Orchestration / LangGraph** | ⏳ Pending (Phase 3) | Deferred to Phase 3 |
+| **Multi-Agent Orchestration (LangGraph)** | ✅ Completed (Phase 3) | StateGraph workflow, SupervisorAgent, specialized workers, loop ceiling, and orchestration API |
+| **Test Suite** | ✅ Completed (Phase 3) | 76 unit and integration tests (zero paid API keys required for testing) |
 | **MCP Tool Ecosystem** | ⏳ Pending (Phase 4) | Deferred to Phase 4 |
 | **RAG & Memory** | ⏳ Pending (Phases 5-6) | Deferred to respective phases |
 
@@ -211,6 +227,61 @@ Example response (zero credentials exposed):
 
 ---
 
+## 🧠 Phase 3: Multi-Agent Orchestration with LangGraph
+
+Phase 3 transitions the platform from a single tool-calling agent to a modular, state-driven multi-agent orchestration graph built on **LangGraph**.
+
+### Graph Topology & State Machine
+
+```
+               START
+                 │
+                 ▼
+         ┌───────────────┐
+         │  Supervisor   │◄──────────────────────────┐
+         └───────┬───────┘                           │
+                 │                                   │
+      ┌──────────┼──────────┐                        │
+      ▼          ▼          ▼                        │
+┌──────────┐┌──────────┐┌──────────┐                 │
+│ Research ││   Data   ││   Code   │                 │
+│  Agent   ││  Agent   ││  Agent   │                 │
+└────┬─────┘└────┬─────┘└────┬─────┘                 │
+     │           │           │                       │
+     └───────────┴───────────┴───────────────────────┘
+                 │
+          (next_agent: final / loop limit)
+                 │
+                 ▼
+          ┌─────────────┐
+          │    Final    │
+          │ Synthesizer │
+          └──────┬──────┘
+                 │
+                 ▼
+                END
+```
+
+### Orchestration Components
+
+- **Typed Orchestration State (`OrchestrationState`)**:
+  - Encapsulates `task`, `messages`, `next_agent`, `agent_results` dict, `agents_used` list, `step_count`, `final_answer`, `status`, and non-sensitive `metadata`.
+- **Defensive Supervisor Routing (`SupervisorAgent`)**:
+  - Evaluates user objectives and accumulated specialist findings.
+  - Strict allowlist parser enforcing only valid targets: `research`, `data`, `code`, `final`.
+  - Malformed model responses, unexpected strings (e.g., `browser`), or parse errors automatically and safely default to `final`.
+- **Specialized Worker Agents**:
+  - **`ResearchAgent`**: Analyzes research tasks and optionally inspects explicitly permitted URLs using `SafeHTTPGetTool`, synthesizing findings with the active LLM. (Web search is deferred to Phase 4 MCP).
+  - **`DataAgent`**: Handles quantitative and numerical analysis, safely reusing `CalculatorTool` for arithmetic verification.
+  - **`CodeAgent`**: Specializes in code architecture, syntax review, and implementation generation. Strictly guarantees zero code execution and zero shell interaction.
+  - **`FinalAgent`**: Aggregates all specialist findings into a unified, user-facing synthesized response.
+- **Deterministic Loop Ceiling**:
+  - Enforces `MAX_ORCHESTRATION_STEPS = 8`. If the supervisor exceeds 8 routing transitions, the workflow forces termination to `final` and records `terminated_due_to_limit: True` in metadata.
+- **Provider-Agnostic Core**:
+  - All supervisor and specialist nodes depend strictly on the abstract `LLMProvider` interface.
+
+---
+
 ## 🤖 Built-In Tools & Security Hardening
 
 - **Calculator Tool (`calculator`)**:
@@ -231,6 +302,7 @@ Example response (zero credentials exposed):
 
 - **Language**: Python 3.12 baseline (supports Python >=3.11)
 - **Web Framework**: [FastAPI](https://fastapi.tiangolo.com/) (0.110+)
+- **Multi-Agent Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph) (StateGraph & typed state workflows)
 - **ASGI Server**: [Uvicorn](https://www.uvicorn.org/) (standard)
 - **Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/latest/) & [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
 - **LLM Integrations**: [OpenAI Python SDK](https://github.com/openai/openai-python) (for OpenRouter & Groq), [Google GenAI SDK](https://github.com/googleapis/python-genai) (for Gemini)
@@ -312,31 +384,29 @@ The interactive API documentation will be available at:
 - **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-### Running an Agent Task via API
+### Running Single-Agent Task via API
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/agent/run \
   -H "Content-Type: application/json" \
   -d '{"task": "Calculate (1000 / 8) + 42"}'
 ```
 
-Example response:
+### Running Multi-Agent Orchestration via API
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/orchestration/run \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Analyze Apple revenue expansion and calculate the CAGR from 2021 to 2023"}'
+```
+
+Example multi-agent response:
 ```json
 {
-  "task": "Calculate (1000 / 8) + 42",
-  "answer": "The result of (1000 / 8) + 42 is 167.",
-  "tool_calls": [
-    {
-      "tool_name": "calculator",
-      "arguments": { "expression": "(1000 / 8) + 42" },
-      "result": { "expression": "(1000 / 8) + 42", "result": 167.0 },
-      "success": true,
-      "error": null,
-      "duration_ms": 0.42
-    }
-  ],
-  "model": "openrouter/free",
+  "task": "Analyze Apple revenue expansion and calculate the CAGR from 2021 to 2023",
+  "answer": "Apple grew revenues from $365.8B in 2021 to $383.3B in 2023. The calculated CAGR across this period is 2.37%...",
+  "agents_used": ["research", "data", "final"],
   "status": "completed",
-  "execution_time_seconds": 0.8532
+  "execution_time_seconds": 1.742,
+  "metadata": null
 }
 ```
 
@@ -346,14 +416,15 @@ Example response:
 
 Execute the automated test suite with `pytest`:
 ```bash
-# Run all 56 tests
+# Run all 76 tests
 pytest -v
 
-# Run linting check
+# Run linting check and code formatting verification
 ruff check .
+ruff format --check .
 ```
 
-All 56 unit and integration tests run offline with zero external API calls or paid credentials.
+All 76 unit and integration tests run offline with zero external API calls or paid credentials.
 
 ---
 
@@ -386,8 +457,8 @@ The platform is engineered iteratively phase-by-phase. Future development will f
   - Unified LLM provider abstraction, tool registry, safe AST calculator, SSRF-hardened HTTP tool, ToolCallingAgent, and REST endpoint.
 - **Phase 2.5 — Multi-Provider LLM Infrastructure** *(Completed)*
   - Provider-agnostic architecture supporting OpenRouter, Google Gemini, Groq, and Mock with free-tier model support and provider status API.
-- **Phase 3 — Multi-Agent Orchestration with LangGraph**
-  - StateGraph design, supervisor routing, specialist worker agents, and deterministic loop control.
+- **Phase 3 — Multi-Agent Orchestration with LangGraph** *(Completed)*
+  - LangGraph StateGraph design, SupervisorAgent with strict allowlist routing, specialist worker agents (Research, Data, Code, Final), deterministic loop ceiling, and REST orchestration API.
 - **Phase 4 — MCP Tool Ecosystem**
   - Model Context Protocol (MCP) clients, adapters, and standardized external resource integration.
 - **Phase 5 — RAG & Knowledge System**
