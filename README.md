@@ -1,4 +1,4 @@
-﻿# Multi-Agent AI Orchestration Platform
+# Multi-Agent AI Orchestration Platform
 
 A production-grade, modular Multi-Agent AI Orchestration Platform designed to coordinate specialized AI agents, tool ecosystems, memory, and retrieval workflows using industry-standard engineering patterns.
 
@@ -102,12 +102,20 @@ multi-agent-orchestration-platform/
 │       │   ├── registry.py      # MCPToolRegistry managing discovery, allowlisting, and injection
 │       │   └── servers/         # In-process MCPServers
 │       │       └── local_tools.py # Local MCPServer with safe AST calculator & text_stats
-│       ├── rag/                 # Retrieval-Augmented Generation pipelines (Phase 5+)
+│       ├── rag/                 # RAG and Knowledge subsystem (Phase 5)
+│       │   ├── models.py        # Document, DocumentChunk, RetrievalResult, Citation schemas
+│       │   ├── chunking.py      # RecursiveChunker with customizable separators and overlap
+│       │   ├── embeddings.py    # LocalEmbeddingProvider (ONNX all-MiniLM-L6-v2), Mock, OpenAI
+│       │   ├── ingestion.py     # DocumentLoader (.txt, .md, page-aware .pdf via pypdf)
+│       │   ├── vector_store.py  # VectorStore abstract interface
+│       │   ├── chroma_store.py  # ChromaVectorStore (PersistentClient default & EphemeralClient)
+│       │   ├── hybrid_retriever.py # BM25 lexical ranking + dense semantic search + RRF fusion
+│       │   └── service.py       # RAGService coordinating ingestion, retrieval, and synthesis
 │       ├── memory/              # Short-term and episodic memory systems (Phase 6+)
-│       ├── db/                  # Database connections and repositories (Phase 5+)
+│       ├── db/                  # Database connections and repositories (Phase 6+)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (96 automated tests)
+└── tests/                       # Pytest test suite (133 automated tests)
     ├── conftest.py                    # Test client fixtures and environment overrides
     ├── test_health.py                 # Health endpoint integration tests
     ├── test_calculator.py             # Calculator tool safety and arithmetic tests
@@ -120,19 +128,29 @@ multi-agent-orchestration-platform/
     ├── test_gemini_provider.py        # Gemini SDK normalization & tool mapping tests
     ├── test_llm_factory_and_status.py # Factory selection and provider status tests
     ├── test_agent_multiprovider.py    # Cross-provider agent tool execution tests
-    ├── test_orchestration_state.py    # OrchestrationState typed structure tests
-    ├── test_supervisor.py             # Strict allowlist parsing and fallback tests
-    ├── test_specialized_agents.py     # Research, Data, Code, and Final agent tests
-    ├── test_orchestration_graph.py    # LangGraph flows, loop ceiling, and state updates
+    ├── test_orchestration_state.py    # LangGraph state management tests
+    ├── test_orchestration_graph.py    # LangGraph workflow execution & routing tests
+    ├── test_specialized_agents.py     # Specialist agents & prompt verification
+    ├── test_supervisor.py             # Supervisor routing & recovery tests
     ├── test_orchestration_api.py      # POST /api/v1/orchestration/run endpoint tests
-    ├── test_mcp_models.py             # MCPToolDefinition and MCPServerStatus model tests
-    ├── test_mcp_server.py             # In-process MCPServer and safe arithmetic tests
-    ├── test_mcp_client.py             # MCPClient v2 Client connection and call tests
+    ├── test_mcp_models.py             # MCP schema serialization and error tests
+    ├── test_mcp_server.py             # MCPServer tool registration & execution tests
+    ├── test_mcp_client.py             # MCPClient initialization & lifespan tests
     ├── test_mcp_adapter.py            # MCPToolAdapter BaseTool compatibility tests
-    ├── test_mcp_registry.py           # MCPToolRegistry allowlisting and collision tests
-    ├── test_mcp_service.py            # MCPService lifecycle and status tests
-    ├── test_mcp_api.py                # GET /api/v1/mcp/health and /tools endpoint tests
-    └── test_mcp_tool_integration.py   # ToolCallingAgent executing mcp.local.calculator
+    ├── test_mcp_registry.py           # MCPToolRegistry allowlisting & injection tests
+    ├── test_mcp_service.py            # MCPService lifecycle & health aggregation tests
+    ├── test_mcp_api.py                # REST API endpoints for MCP servers & tools
+    ├── test_mcp_tool_integration.py   # Agent execution of MCP tools via ToolRegistry
+    ├── test_rag_models.py             # Document and chunk schema validation tests
+    ├── test_rag_chunking.py           # Recursive chunker and separator hierarchy tests
+    ├── test_rag_embeddings.py         # Local, Mock, and OpenAI embedding provider tests
+    ├── test_rag_ingestion.py          # Text, markdown, and PDF page-aware loader tests
+    ├── test_rag_vector_store.py       # ChromaVectorStore indexing & similarity tests
+    ├── test_rag_hybrid_retriever.py   # BM25 + dense search + RRF fusion tests
+    ├── test_rag_service.py            # RAGService ingestion, retrieval, and QA tests
+    ├── test_knowledge_search_tool.py  # KnowledgeSearchTool schema and execution tests
+    ├── test_knowledge_api.py          # REST API endpoints for /api/v1/knowledge/*
+    └── test_rag_tool_agent_integration.py # Agent knowledge search execution tests
 ```
 
 ---
@@ -152,8 +170,8 @@ multi-agent-orchestration-platform/
 | **Provider Status Endpoint** | ✅ Completed (Phase 2.5) | `GET /api/v1/llm/providers` exposing active provider and configuration readiness |
 | **Multi-Agent Orchestration (LangGraph)** | ✅ Completed (Phase 3) | StateGraph workflow, SupervisorAgent, specialized workers, loop ceiling, and orchestration API |
 | **MCP Tool Ecosystem** | ✅ Completed (Phase 4) | Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing & REST APIs |
-| **Test Suite** | ✅ Completed (Phase 4) | 96 unit and integration tests (zero paid API keys required for testing) |
-| **RAG & Knowledge System** | ⏳ Pending (Phase 5) | Deferred to Phase 5 |
+| **RAG & Knowledge System** | ✅ Completed (Phase 5) | Page-aware loaders, RecursiveChunker, Local ONNX embeddings, Chroma PersistentClient, BM25 + Dense RRF |
+| **Test Suite** | ✅ Completed (Phase 5) | 133 unit and integration tests (zero paid API keys required for testing) |
 | **Memory & HITL** | ⏳ Pending (Phase 6) | Deferred to Phase 6 |
 
 ---
@@ -297,6 +315,96 @@ Phase 3 transitions the platform from a single tool-calling agent to a modular, 
 
 ---
 
+## 🔌 Phase 4: MCP Tool Ecosystem
+
+Phase 4 establishes native Model Context Protocol (MCP) support using the official MCP Python SDK v2 line (`Client` and `MCPServer`).
+
+### Architectural Integration
+MCP tools are exposed to agents seamlessly through `MCPToolAdapter`, which converts standard MCP schemas into `BaseTool` instances. The agents remain completely decoupled from MCP transport details:
+
+```text
+Agent
+  ↓
+ToolRegistry
+  ├── Native Tools (Calculator, SafeHTTP, KnowledgeSearch)
+  └── MCPToolAdapter
+        ↓
+    MCPClient
+        ↓
+    MCPServer (e.g., mcp.local.calculator, mcp.local.text_stats)
+```
+
+- **Namespacing & Collision Prevention**: Local MCP tools are prefixed with `mcp.local.*`.
+- **Strict Allowlisting**: Only explicitly allowlisted tools are registered into the agent's tool registry.
+- **REST Endpoints**:
+  - `GET /api/v1/mcp/health`: Aggregated status of all registered MCP servers.
+  - `GET /api/v1/mcp/tools`: List of discovered and active MCP tools with parameter schemas.
+
+---
+
+## 📚 Phase 5: RAG & Knowledge System
+
+Phase 5 introduces a production-grade, modular Retrieval-Augmented Generation (RAG) subsystem providing knowledge ingestion, persistent vector storage, hybrid retrieval, and grounded question answering with structured source citations.
+
+### RAG Architecture
+
+```text
+Agent / User
+  ↓
+ToolRegistry (KnowledgeSearchTool) / REST API (/api/v1/knowledge/*)
+  ↓
+RAGService
+  ↓
+HybridRetriever
+  ├── Dense Semantic Search (LocalEmbeddingProvider: ONNX all-MiniLM-L6-v2)
+  └── Lexical Keyword Search (BM25Scorer)
+       ↓
+  Reciprocal Rank Fusion (RRF, k=60)
+       ↓
+  ChromaVectorStore (PersistentClient at ./data/chroma by default)
+```
+
+### Key RAG Components
+
+1. **Document Loaders & Ingestion (`DocumentLoader`)**:
+   - Ingests raw text, Markdown, and page-aware PDFs (via `pypdf`).
+   - Extracts page-level metadata (`page_number`, `source`, `filename`) for precise citation attribution.
+   - Enforces configurable file size limits (`RAG_MAX_FILE_SIZE_BYTES`, default 10MB).
+
+2. **Recursive Chunker (`RecursiveChunker`)**:
+   - Hierarchical separator splitting (`\n\n`, `\n`, `. `, ` `, empty string).
+   - Configurable chunk size (`RAG_CHUNK_SIZE`, default 800 characters) and overlap (`RAG_CHUNK_OVERLAP`, default 150 characters).
+
+3. **Embedding Providers (`EmbeddingProvider`)**:
+   - **`LocalEmbeddingProvider`** (*Default Application Runtime*): High-performance local sentence embedding using Chroma's ONNX-based `all-MiniLM-L6-v2` (384 dimensions). Requires zero external API keys or cloud dependencies.
+   - **`MockEmbeddingProvider`**: Deterministic SHA-256 unit-normalized embeddings for instant offline automated tests.
+   - **`OpenAIEmbeddingProvider`**: Optional cloud provider for `text-embedding-3-small` / `text-embedding-3-large`.
+
+4. **Persistent Vector Store (`ChromaVectorStore`)**:
+   - Runtime uses Chroma's `PersistentClient` targeting `./data/chroma` by default, guaranteeing data persistence across application restarts.
+   - Isolated `EphemeralClient` support for ephemeral test runs.
+
+5. **Hybrid Retrieval with Reciprocal Rank Fusion (`HybridRetriever` & `BM25Scorer`)**:
+   - Combines BM25 lexical term frequency scoring with dense vector cosine similarity.
+   - Fuses ranked lists using **Reciprocal Rank Fusion (RRF)** ($k=60$ default).
+   - Also supports configurable linear weighted fusion (`strategy="weighted"`).
+
+6. **Knowledge Search Tool (`KnowledgeSearchTool`)**:
+   - Registered directly into `ToolRegistry` when `RAG_ENABLED=true`.
+   - Accessible by `ToolCallingAgent` and LangGraph specialist agents.
+   - Returns structured snippets, document IDs, page numbers, and similarity scores.
+
+7. **Knowledge REST API (`/api/v1/knowledge/*`)**:
+   - `POST /api/v1/knowledge/documents`: Ingest raw text or markdown document.
+   - `POST /api/v1/knowledge/documents/upload`: Multipart file upload (.txt, .md, .pdf).
+   - `GET /api/v1/knowledge/documents`: List indexed documents and metadata.
+   - `DELETE /api/v1/knowledge/documents/{document_id}`: Delete document and all associated chunks.
+   - `POST /api/v1/knowledge/search`: Hybrid RRF / semantic / BM25 search.
+   - `POST /api/v1/knowledge/query`: Grounded RAG question answering with structured citations.
+   - `GET /api/v1/knowledge/stats`: Knowledge base statistics (total documents, chunks, embedding dimension).
+
+---
+
 ## 🤖 Built-In Tools & Security Hardening
 
 - **Calculator Tool (`calculator`)**:
@@ -431,7 +539,7 @@ Example multi-agent response:
 
 Execute the automated test suite with `pytest`:
 ```bash
-# Run all 76 tests
+# Run all 133 tests
 pytest -v
 
 # Run linting check and code formatting verification
@@ -439,7 +547,7 @@ ruff check .
 ruff format --check .
 ```
 
-All 76 unit and integration tests run offline with zero external API calls or paid credentials.
+All 133 unit and integration tests run offline with zero external API calls or paid credentials.
 
 ---
 
@@ -474,10 +582,10 @@ The platform is engineered iteratively phase-by-phase. Future development will f
   - Provider-agnostic architecture supporting OpenRouter, Google Gemini, Groq, and Mock with free-tier model support and provider status API.
 - **Phase 3 — Multi-Agent Orchestration with LangGraph** *(Completed)*
   - LangGraph StateGraph design, SupervisorAgent with strict allowlist routing, specialist worker agents (Research, Data, Code, Final), deterministic loop ceiling, and REST orchestration API.
-- **Phase 4 — MCP Tool Ecosystem**
-  - Model Context Protocol (MCP) clients, adapters, and standardized external resource integration.
-- **Phase 5 — RAG & Knowledge System**
-  - Document parsing, vector database indexing, hybrid semantic search, and retrieval pipelines.
+- **Phase 4 — MCP Tool Ecosystem** *(Completed)*
+  - Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing, and REST APIs.
+- **Phase 5 — RAG & Knowledge System** *(Completed)*
+  - Document parsing (.txt, .md, .pdf), RecursiveChunker, Local ONNX embeddings (`all-MiniLM-L6-v2`), persistent ChromaVectorStore, BM25 + dense hybrid search with Reciprocal Rank Fusion (RRF), `KnowledgeSearchTool`, and REST APIs.
 - **Phase 6 — Memory & Human-in-the-Loop**
   - State checkpointing, long-term episodic memory, interruption breakpoints, and human review gates.
 - **Phase 7 — Observability, Guardrails & Evaluation**

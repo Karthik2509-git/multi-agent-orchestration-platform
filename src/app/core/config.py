@@ -1,7 +1,7 @@
 """Application configuration management using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Union
+from typing import List, Optional, Union
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -117,6 +117,29 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [tool.strip().lower() for tool in v.split(",") if tool.strip()]
         return [t.lower() for t in v]
+
+    # RAG & Knowledge System Settings (Phase 5)
+    rag_enabled: bool = True
+    rag_persist_directory: Optional[str] = "./data/chroma"
+    rag_collection_name: str = "knowledge_base"
+    rag_chunk_size: int = 800
+    rag_chunk_overlap: int = 150
+    rag_default_top_k: int = 5
+    rag_hybrid_alpha: float = 0.6
+    rag_embedding_provider: str = "local"
+    rag_max_file_size_bytes: int = 10_000_000
+
+    @field_validator("rag_embedding_provider", mode="before")
+    @classmethod
+    def validate_rag_embedding_provider(cls, v: str) -> str:
+        """Ensure RAG embedding provider is supported."""
+        allowed = {"local", "mock", "openai"}
+        normalized = v.strip().lower()
+        if normalized not in allowed:
+            raise ValueError(
+                f"Unsupported RAG_EMBEDDING_PROVIDER '{v}'. Allowed providers: {sorted(allowed)}"
+            )
+        return normalized
 
 
 @lru_cache

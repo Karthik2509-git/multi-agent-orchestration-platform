@@ -25,6 +25,14 @@ class ToolRegistry:
         """Retrieve a registered tool by name."""
         return self._tools.get(name)
 
+    def has_tool(self, name: str) -> bool:
+        """Check if a tool is registered by name."""
+        return name in self._tools
+
+    def __contains__(self, name: str) -> bool:
+        """Support 'in' operator to check tool existence."""
+        return name in self._tools
+
     def list_tools(self) -> List[BaseTool]:
         """Return all registered tool instances."""
         return list(self._tools.values())

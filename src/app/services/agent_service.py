@@ -1,6 +1,6 @@
 """Service coordinating agent initialization, tool registration, and execution."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from src.app.agents.tool_calling_agent import ToolCallingAgent
 from src.app.core.config import Settings
@@ -19,8 +19,9 @@ logger = get_logger(__name__)
 def build_default_tool_registry(
     settings: Settings,
     mcp_service: Optional[MCPService] = None,
+    rag_service: Optional[Any] = None,
 ) -> ToolRegistry:
-    """Construct standard ToolRegistry with Calculator, SafeHTTP, and approved MCP tools."""
+    """Construct standard ToolRegistry with Native, KnowledgeSearch, and approved MCP tools."""
     registry = ToolRegistry()
     registry.register(CalculatorTool())
     registry.register(
@@ -30,6 +31,12 @@ def build_default_tool_registry(
             max_size_bytes=settings.tool_http_max_size_bytes,
         )
     )
+
+    # Register KnowledgeSearchTool if RAG is enabled
+    if settings.rag_enabled:
+        from src.app.tools.knowledge_search import KnowledgeSearchTool
+
+        registry.register(KnowledgeSearchTool(rag_service=rag_service))
 
     # Register approved MCP tools if MCP is active
     active_mcp = mcp_service or (get_mcp_service(settings) if settings.mcp_enabled else None)
