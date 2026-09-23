@@ -8,6 +8,7 @@ from src.app.core.logging import get_logger
 from src.app.llm.base import LLMProvider
 from src.app.llm.factory import get_llm_provider
 from src.app.models.schemas.agent import AgentRunResponse
+from src.app.services.mcp_service import MCPService, get_mcp_service
 from src.app.tools.calculator import CalculatorTool
 from src.app.tools.http_tool import SafeHTTPGetTool
 from src.app.tools.registry import ToolRegistry
@@ -15,8 +16,11 @@ from src.app.tools.registry import ToolRegistry
 logger = get_logger(__name__)
 
 
-def build_default_tool_registry(settings: Settings) -> ToolRegistry:
-    """Construct and configure the standard tool registry with Calculator and SafeHTTPGetTool."""
+def build_default_tool_registry(
+    settings: Settings,
+    mcp_service: Optional[MCPService] = None,
+) -> ToolRegistry:
+    """Construct standard ToolRegistry with Calculator, SafeHTTP, and approved MCP tools."""
     registry = ToolRegistry()
     registry.register(CalculatorTool())
     registry.register(
@@ -26,6 +30,12 @@ def build_default_tool_registry(settings: Settings) -> ToolRegistry:
             max_size_bytes=settings.tool_http_max_size_bytes,
         )
     )
+
+    # Register approved MCP tools if MCP is active
+    active_mcp = mcp_service or (get_mcp_service(settings) if settings.mcp_enabled else None)
+    if active_mcp is not None:
+        active_mcp.register_tools_into(registry)
+
     return registry
 
 

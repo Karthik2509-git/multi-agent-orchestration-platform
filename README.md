@@ -1,4 +1,4 @@
-# Multi-Agent AI Orchestration Platform
+﻿# Multi-Agent AI Orchestration Platform
 
 A production-grade, modular Multi-Agent AI Orchestration Platform designed to coordinate specialized AI agents, tool ecosystems, memory, and retrieval workflows using industry-standard engineering patterns.
 
@@ -95,13 +95,19 @@ multi-agent-orchestration-platform/
 │       ├── orchestration/       # LangGraph multi-agent workflows
 │       │   ├── state.py         # Shared typed state (OrchestrationState)
 │       │   └── graph.py         # StateGraph assembly, worker routing & loop ceiling
-│       ├── mcp/                 # Model Context Protocol clients (Phase 4+)
+│       ├── mcp/                 # Model Context Protocol (MCP) subsystem
+│       │   ├── models.py        # Normalized MCP tool definition & server status contracts
+│       │   ├── client.py        # MCPClient wrapper delegating to official v2 Client
+│       │   ├── adapters.py      # MCPToolAdapter making MCP tools compatible with BaseTool
+│       │   ├── registry.py      # MCPToolRegistry managing discovery, allowlisting, and injection
+│       │   └── servers/         # In-process MCPServers
+│       │       └── local_tools.py # Local MCPServer with safe AST calculator & text_stats
 │       ├── rag/                 # Retrieval-Augmented Generation pipelines (Phase 5+)
 │       ├── memory/              # Short-term and episodic memory systems (Phase 6+)
 │       ├── db/                  # Database connections and repositories (Phase 5+)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (76 automated tests)
+└── tests/                       # Pytest test suite (96 automated tests)
     ├── conftest.py                    # Test client fixtures and environment overrides
     ├── test_health.py                 # Health endpoint integration tests
     ├── test_calculator.py             # Calculator tool safety and arithmetic tests
@@ -118,7 +124,15 @@ multi-agent-orchestration-platform/
     ├── test_supervisor.py             # Strict allowlist parsing and fallback tests
     ├── test_specialized_agents.py     # Research, Data, Code, and Final agent tests
     ├── test_orchestration_graph.py    # LangGraph flows, loop ceiling, and state updates
-    └── test_orchestration_api.py      # POST /api/v1/orchestration/run endpoint tests
+    ├── test_orchestration_api.py      # POST /api/v1/orchestration/run endpoint tests
+    ├── test_mcp_models.py             # MCPToolDefinition and MCPServerStatus model tests
+    ├── test_mcp_server.py             # In-process MCPServer and safe arithmetic tests
+    ├── test_mcp_client.py             # MCPClient v2 Client connection and call tests
+    ├── test_mcp_adapter.py            # MCPToolAdapter BaseTool compatibility tests
+    ├── test_mcp_registry.py           # MCPToolRegistry allowlisting and collision tests
+    ├── test_mcp_service.py            # MCPService lifecycle and status tests
+    ├── test_mcp_api.py                # GET /api/v1/mcp/health and /tools endpoint tests
+    └── test_mcp_tool_integration.py   # ToolCallingAgent executing mcp.local.calculator
 ```
 
 ---
@@ -137,9 +151,10 @@ multi-agent-orchestration-platform/
 | **Multi-Provider LLM Infrastructure** | ✅ Completed (Phase 2.5) | Provider-agnostic architecture: OpenRouter, Google Gemini, Groq, Mock, and OpenAI |
 | **Provider Status Endpoint** | ✅ Completed (Phase 2.5) | `GET /api/v1/llm/providers` exposing active provider and configuration readiness |
 | **Multi-Agent Orchestration (LangGraph)** | ✅ Completed (Phase 3) | StateGraph workflow, SupervisorAgent, specialized workers, loop ceiling, and orchestration API |
-| **Test Suite** | ✅ Completed (Phase 3) | 76 unit and integration tests (zero paid API keys required for testing) |
-| **MCP Tool Ecosystem** | ⏳ Pending (Phase 4) | Deferred to Phase 4 |
-| **RAG & Memory** | ⏳ Pending (Phases 5-6) | Deferred to respective phases |
+| **MCP Tool Ecosystem** | ✅ Completed (Phase 4) | Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing & REST APIs |
+| **Test Suite** | ✅ Completed (Phase 4) | 96 unit and integration tests (zero paid API keys required for testing) |
+| **RAG & Knowledge System** | ⏳ Pending (Phase 5) | Deferred to Phase 5 |
+| **Memory & HITL** | ⏳ Pending (Phase 6) | Deferred to Phase 6 |
 
 ---
 

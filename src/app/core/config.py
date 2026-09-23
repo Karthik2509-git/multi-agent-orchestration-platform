@@ -101,6 +101,23 @@ class Settings(BaseSettings):
             return [domain.strip().lower() for domain in v.split(",") if domain.strip()]
         return [d.lower() for d in v]
 
+    # Model Context Protocol (MCP) Settings (Phase 4)
+    mcp_enabled: bool = False
+    mcp_local_server_enabled: bool = True
+    mcp_local_server_name: str = "local"
+    mcp_allowed_tools: Union[List[str], str] = [
+        "mcp.local.calculator",
+        "mcp.local.text_stats",
+    ]
+
+    @field_validator("mcp_allowed_tools", mode="before")
+    @classmethod
+    def assemble_mcp_allowed_tools(cls, v: Union[str, List[str]]) -> List[str]:
+        """Parse comma-separated string into a list of allowed MCP tools."""
+        if isinstance(v, str):
+            return [tool.strip().lower() for tool in v.split(",") if tool.strip()]
+        return [t.lower() for t in v]
+
 
 @lru_cache
 def get_settings() -> Settings:

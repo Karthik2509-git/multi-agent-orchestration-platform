@@ -11,6 +11,7 @@ from src.app.core.config import Settings, get_settings
 from src.app.core.logging import get_logger, setup_logging
 from src.app.models.schemas.health import HealthResponse
 from src.app.services.health import get_health_status
+from src.app.services.mcp_service import get_mcp_service
 
 logger = get_logger(__name__)
 
@@ -26,7 +27,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
         settings.app_env,
     )
+
+    # Initialize MCP subsystem if enabled
+    mcp_service = get_mcp_service(settings)
+    if settings.mcp_enabled:
+        await mcp_service.initialize()
+
     yield
+
+    # Teardown MCP subsystem if enabled
+    if settings.mcp_enabled:
+        await mcp_service.shutdown()
+
     logger.info("Shutting down %s", settings.app_name)
 
 
