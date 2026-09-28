@@ -141,6 +141,21 @@ class Settings(BaseSettings):
             )
         return normalized
 
+    # Memory Settings (Phase 6)
+    memory_enabled: bool = True
+    memory_persist_directory: Optional[str] = "./data/chroma_memory"
+    memory_collection_name: str = "agent_memory"
+    memory_default_top_k: int = 3
+    memory_similarity_threshold: float = 0.0
+    memory_consolidation_threshold: float = 0.90
+    memory_default_ttl_seconds: Optional[int] = None
+
+    # Human-in-the-Loop & Checkpointing Settings (Phase 6)
+    hitl_enabled: bool = True
+    hitl_confidence_threshold: float = 0.65
+    hitl_max_specialist_retries: int = 2
+    checkpoint_backend: str = "postgres"  # "postgres" (durable runtime) or "memory" (tests)
+
 
 @lru_cache
 def get_settings() -> Settings:

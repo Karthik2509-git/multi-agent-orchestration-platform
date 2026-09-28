@@ -2,7 +2,16 @@
 
 from fastapi import APIRouter
 
-from src.app.api.v1.endpoints import agent, health, knowledge, llm, mcp, orchestration
+from src.app.api.v1.endpoints import (
+    agent,
+    health,
+    hitl,
+    knowledge,
+    llm,
+    mcp,
+    memory,
+    orchestration,
+)
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health.router, tags=["Health"])
@@ -11,3 +20,5 @@ api_v1_router.include_router(llm.router, prefix="/llm", tags=["LLM"])
 api_v1_router.include_router(orchestration.router, prefix="/orchestration", tags=["Orchestration"])
 api_v1_router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
 api_v1_router.include_router(knowledge.router, prefix="/knowledge", tags=["Knowledge"])
+api_v1_router.include_router(memory.router, prefix="/memory", tags=["Memory"])
+api_v1_router.include_router(hitl.router, prefix="/hitl", tags=["Human-in-the-Loop"])

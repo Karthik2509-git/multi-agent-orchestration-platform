@@ -35,6 +35,9 @@ async def run_orchestration(
         response = await run_orchestrated_task(
             task=request.task,
             settings=settings,
+            thread_id=request.thread_id,
+            scope_id=request.scope_id,
+            require_human_review=request.require_human_review,
         )
         return response
     except ValueError as val_err:

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.app.api.v1.api import api_v1_router
 from src.app.core.config import Settings, get_settings
 from src.app.core.logging import get_logger, setup_logging
+from src.app.memory.working_memory import close_checkpointer, init_checkpointer
 from src.app.models.schemas.health import HealthResponse
 from src.app.services.health import get_health_status
 from src.app.services.mcp_service import get_mcp_service
@@ -19,7 +20,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown events."""
-    settings = get_settings()
+    get_settings_fn = app.dependency_overrides.get(get_settings, get_settings)
+    settings = get_settings_fn()
     setup_logging(log_level=settings.log_level)
     logger.info(
         "Starting %s [version=%s, env=%s]",
@@ -27,6 +29,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
         settings.app_env,
     )
+
+    # Initialize checkpointer pool if configured
+    await init_checkpointer(settings)
 
     # Initialize MCP subsystem if enabled
     mcp_service = get_mcp_service(settings)
@@ -38,6 +43,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Teardown MCP subsystem if enabled
     if settings.mcp_enabled:
         await mcp_service.shutdown()
+
+    # Teardown checkpointer pool
+    await close_checkpointer()
 
     logger.info("Shutting down %s", settings.app_name)
 

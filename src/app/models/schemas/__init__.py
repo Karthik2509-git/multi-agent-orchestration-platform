@@ -2,6 +2,11 @@
 
 from src.app.models.schemas.agent import AgentRunRequest, AgentRunResponse
 from src.app.models.schemas.health import HealthResponse
+from src.app.models.schemas.hitl import (
+    PendingApprovalResponse,
+    ResumeTaskRequest,
+    ResumeTaskResponse,
+)
 from src.app.models.schemas.knowledge import (
     CitationItem,
     DocumentDeleteResponse,
@@ -21,6 +26,16 @@ from src.app.models.schemas.mcp import (
     MCPServerInfo,
     MCPToolItem,
     MCPToolsListResponse,
+)
+from src.app.models.schemas.memory import (
+    MemoryConsolidationResponse,
+    MemoryCreateRequest,
+    MemoryListResponse,
+    MemoryResponse,
+    MemorySearchItem,
+    MemorySearchRequest,
+    MemorySearchResponse,
+    MemoryStatsResponse,
 )
 from src.app.models.schemas.orchestration import (
     OrchestrationRunRequest,
@@ -49,4 +64,15 @@ __all__ = [
     "KnowledgeQueryRequest",
     "KnowledgeQueryResponse",
     "KnowledgeStatsResponse",
+    "MemoryCreateRequest",
+    "MemoryResponse",
+    "MemoryListResponse",
+    "MemorySearchRequest",
+    "MemorySearchItem",
+    "MemorySearchResponse",
+    "MemoryConsolidationResponse",
+    "MemoryStatsResponse",
+    "PendingApprovalResponse",
+    "ResumeTaskRequest",
+    "ResumeTaskResponse",
 ]

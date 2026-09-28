@@ -51,6 +51,24 @@ class FinalAgent(BaseSpecializedAgent):
                 f"Task: {task}\n\nPlease provide a comprehensive and direct answer to this task."
             )
 
+        metadata = state.get("metadata", {})
+        modified_action = metadata.get("modified_action")
+        human_feedback = metadata.get("human_feedback")
+        human_decision = metadata.get("human_decision")
+
+        reviewer_notes = []
+        if human_decision == "modified":
+            reviewer_notes.append("### HUMAN REVIEWER MODIFICATIONS:")
+            if human_feedback:
+                reviewer_notes.append(f"Reviewer Instructions: {human_feedback}")
+            if modified_action:
+                reviewer_notes.append(f"Modified Action / Parameters: {modified_action}")
+        elif human_feedback:
+            reviewer_notes.append(f"### Human Reviewer Feedback: {human_feedback}")
+
+        if reviewer_notes:
+            user_content += "\n\n" + "\n".join(reviewer_notes)
+
         messages = [
             {"role": "system", "content": FINAL_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},

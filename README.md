@@ -65,14 +65,16 @@ multi-agent-orchestration-platform/
 │       │       ├── agent.py         # Single agent request and response contracts
 │       │       ├── llm.py           # LLM provider response and tool call contracts
 │       │       ├── provider.py      # Provider configuration status schema
-│       │       └── orchestration.py # Multi-agent orchestration run contracts
+│       │       ├── orchestration.py # Multi-agent orchestration run contracts
+│       │       ├── memory.py        # Long-term semantic memory schemas
+│       │       └── hitl.py          # HITL approval request & response schemas
 │       ├── services/            # Reusable business logic services
 │       │   ├── health.py                # Shared health status generator
 │       │   ├── agent_service.py         # Agent task execution and tool registry factory
-│       │   └── orchestration_service.py # LangGraph workflow coordinator
+│       │   └── orchestration_service.py # LangGraph workflow coordinator with Memory & HITL
 │       ├── agents/              # Agent layer
 │       │   ├── base.py               # BaseSpecializedAgent and AgentResult
-│       │   ├── supervisor.py         # SupervisorAgent with strict allowlist routing
+│       │   ├── supervisor.py         # SupervisorAgent with strict allowlist routing & memory context
 │       │   ├── research_agent.py     # ResearchAgent with safe URL retrieval
 │       │   ├── data_agent.py         # DataAgent with CalculatorTool integration
 │       │   ├── code_agent.py         # CodeAgent with zero-execution guarantee
@@ -82,7 +84,8 @@ multi-agent-orchestration-platform/
 │       │   ├── base.py          # BaseTool and ToolResult abstractions
 │       │   ├── registry.py      # Tool discovery and execution registry
 │       │   ├── calculator.py    # Safe AST-based arithmetic calculator
-│       │   └── http_tool.py     # Safe HTTP GET with SSRF and DNS-rebinding protection
+│       │   ├── http_tool.py     # Safe HTTP GET with SSRF and DNS-rebinding protection
+│       │   └── knowledge_search.py # RAG KnowledgeSearchTool
 │       ├── llm/                 # Unified LLM provider adapters
 │       │   ├── base.py          # LLMProvider abstract interface
 │       │   ├── factory.py       # LLM provider dependency injection factory
@@ -94,7 +97,7 @@ multi-agent-orchestration-platform/
 │       │       └── openai.py     # Optional legacy OpenAI provider
 │       ├── orchestration/       # LangGraph multi-agent workflows
 │       │   ├── state.py         # Shared typed state (OrchestrationState)
-│       │   └── graph.py         # StateGraph assembly, worker routing & loop ceiling
+│       │   └── graph.py         # StateGraph with Memory retrieval & ApprovalGate
 │       ├── mcp/                 # Model Context Protocol (MCP) subsystem
 │       │   ├── models.py        # Normalized MCP tool definition & server status contracts
 │       │   ├── client.py        # MCPClient wrapper delegating to official v2 Client
@@ -111,11 +114,22 @@ multi-agent-orchestration-platform/
 │       │   ├── chroma_store.py  # ChromaVectorStore (PersistentClient default & EphemeralClient)
 │       │   ├── hybrid_retriever.py # BM25 lexical ranking + dense semantic search + RRF fusion
 │       │   └── service.py       # RAGService coordinating ingestion, retrieval, and synthesis
-│       ├── memory/              # Short-term and episodic memory systems (Phase 6+)
-│       ├── db/                  # Database connections and repositories (Phase 6+)
+│       ├── memory/              # Memory & Persistence subsystem (Phase 6)
+│       │   ├── models.py        # MemoryRecord, MemorySearchResult, MemoryType, MemoryStats
+│       │   ├── interfaces.py    # MemoryStore abstract base class
+│       │   ├── stores/          # ChromaMemoryStore with strict scope isolation
+│       │   ├── retrieval.py     # MemoryRetriever with composite score ranking
+│       │   ├── extraction.py    # MemoryExtractor (deterministic & LLM extraction)
+│       │   ├── consolidation.py # MemoryConsolidator for duplicate merging & TTL cleanup
+│       │   ├── working_memory.py # LangGraph checkpointer factory (AsyncPostgresSaver / MemorySaver)
+│       │   └── service.py       # MemoryService unified coordinator
+│       ├── hitl/                # Human-in-the-Loop subsystem (Phase 6)
+│       │   ├── models.py        # HITLRequest, HITLResponse, ApprovalDecision, ApprovalLevel
+│       │   ├── policies.py      # EscalationPolicy for deterministic & confidence triggers
+│       │   └── service.py       # HITLService for pending inspection & Command(resume=...)
 │       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
 │       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (133 automated tests)
+└── tests/                       # Pytest test suite (158 automated tests)
     ├── conftest.py                    # Test client fixtures and environment overrides
     ├── test_health.py                 # Health endpoint integration tests
     ├── test_calculator.py             # Calculator tool safety and arithmetic tests
@@ -143,6 +157,23 @@ multi-agent-orchestration-platform/
     ├── test_mcp_tool_integration.py   # Agent execution of MCP tools via ToolRegistry
     ├── test_rag_models.py             # Document and chunk schema validation tests
     ├── test_rag_chunking.py           # Recursive chunker and separator hierarchy tests
+    ├── test_rag_embeddings.py         # Embedding provider tests (Local ONNX & Mock)
+    ├── test_rag_ingestion.py          # Document loader tests (Text, Markdown, PDF)
+    ├── test_rag_vector_store.py       # ChromaVectorStore persistent & ephemeral tests
+    ├── test_rag_hybrid_retriever.py   # BM25 + dense hybrid search & RRF ranking tests
+    ├── test_rag_service.py            # RAGService ingestion, search & query tests
+    ├── test_rag_tool_agent_integration.py # Agent KnowledgeSearchTool execution tests
+    ├── test_memory_models.py          # MemoryRecord and search result models
+    ├── test_memory_store.py           # ChromaMemoryStore CRUD and scope isolation
+    ├── test_memory_retrieval.py       # Composite ranking and prompt formatting
+    ├── test_memory_extraction.py      # Deterministic and LLM memory extraction
+    ├── test_memory_consolidation.py   # Duplicate merging and TTL expiration
+    ├── test_working_memory.py         # Thread checkpointing and recovery tests
+    ├── test_hitl_policies.py          # EscalationPolicy trigger evaluation tests
+    ├── test_hitl_workflow.py          # LangGraph interrupt and Command resume workflow
+    ├── test_memory_api.py             # REST API for long-term memory management
+    ├── test_hitl_api.py               # REST API for HITL pending and resume flow
+    └── test_orchestration_phase6_integration.py # End-to-end multi-agent Memory & HITL test
     ├── test_rag_embeddings.py         # Local, Mock, and OpenAI embedding provider tests
     ├── test_rag_ingestion.py          # Text, markdown, and PDF page-aware loader tests
     ├── test_rag_vector_store.py       # ChromaVectorStore indexing & similarity tests
@@ -405,6 +436,77 @@ HybridRetriever
 
 ---
 
+## 🧠 Phase 6 — Memory & Human-in-the-Loop (HITL)
+
+Phase 6 equips the orchestration platform with stateful conversational durability, cross-task long-term semantic memory, and native LangGraph human-in-the-loop review and approval workflows.
+
+### Memory & HITL Architecture
+
+```text
+User / API Call (POST /api/v1/orchestration/run)
+   ↓ (thread_id in configurable)
+Supervisor Node
+   ↓ (queries MemoryRetriever)
+ChromaMemoryStore (agent_memory in ./data/chroma_memory)
+   ↓ (composite score: 0.65*sim + 0.25*imp + 0.10*recency)
+Specialist Execution (Research / Data / Code / Final)
+   ↓
+Approval Gate Node
+   ├── Deterministic Escalation (requires_human_approval=True)
+   ├── Sensitive Action Trigger (financial, deletion, infrastructure)
+   ├── Specialist Failure Escalation (max_retries exceeded)
+   └── Calibrated Confidence Trigger (if explicit confidence <= threshold)
+        ↓ (if triggered)
+   interrupt(interrupt_payload) ──> Return status: "interrupted"
+        │
+   [Human Reviewer Inspects via GET /api/v1/hitl/pending/{thread_id}]
+        │
+   [Human Submits Decision via POST /api/v1/hitl/resume/{thread_id}]
+        ↓ (Command(resume=...))
+   Decision Evaluator (APPROVE / REJECT / MODIFY / TAKE_OVER)
+        ↓
+   Working Memory Checkpointer (PostgreSQL AsyncPostgresSaver / MemorySaver)
+```
+
+### Key Memory & HITL Components
+
+1. **Persistent Working Memory (`working_memory.py`)**:
+   - Production runtime uses PostgreSQL-backed `AsyncPostgresSaver` via `AsyncConnectionPool`.
+   - `MemorySaver` / `InMemorySaver` is strictly reserved for automated unit/integration tests.
+   - `thread_id` is maintained exclusively in LangGraph execution configuration (`{"configurable": {"thread_id": "..."}}`), preventing state pollution.
+
+2. **Long-Term Semantic Memory (`ChromaMemoryStore`)**:
+   - Stored in a separate Chroma collection (`agent_memory` in `./data/chroma_memory`), completely isolated from the RAG knowledge base.
+   - Strict scope isolation (`scope_id`) ensures memories belonging to one user or tenant cannot be retrieved or leaked into other scopes.
+   - Categorized by `MemoryType` (`user_preference`, `task_lesson`, `successful_strategy`, `domain_fact`).
+
+3. **Composite Scoring & Memory-Guided Planning (`MemoryRetriever`)**:
+   - Ranks retrieved memories using the formula:
+     $$\text{Score} = 0.65 \times \text{Similarity} + 0.25 \times \text{Importance} + 0.10 \times \text{Recency}$$
+   - Automatically formats relevant memories into concise contextual prompts injected before supervisor routing decisions.
+
+4. **Memory Extraction & Safe Consolidation (`MemoryExtractor` & `MemoryConsolidator`)**:
+   - Selective extraction pipeline with both deterministic rule extraction and LLM-assisted structured extraction.
+   - Non-destructive consolidation merges semantic duplicates by taking maximum importance, summing access counts, unioning task provenance, and combining metadata.
+
+5. **Native LangGraph HITL Escalation (`approval_gate_node`)**:
+   - Triggers native LangGraph `interrupt()` on deterministic triggers (`requires_human_approval=True`), sensitive operations, and retry exhaustion.
+   - Resumes seamlessly via `Command(resume=...)` across independent HTTP requests supporting `approve`, `reject`, `modify`, and `take_over`.
+
+6. **Memory & HITL REST APIs**:
+   - **`POST /api/v1/orchestration/run`**: Thread-aware orchestration with automatic `status: "interrupted"` and pending approval details when paused.
+   - **`GET /api/v1/hitl/pending/{thread_id}`**: Inspect pending approval requests, context summary, and escalation reason.
+   - **`POST /api/v1/hitl/resume/{thread_id}`**: Resume interrupted thread with human review decision (`approve`, `reject`, `modify`, `take_over`).
+   - **`POST /api/v1/memory`**: Create a new long-term semantic memory record.
+   - **`GET /api/v1/memory/{id}`**: Get memory item by ID.
+   - **`GET /api/v1/memory`**: List memories for a given scope.
+   - **`POST /api/v1/memory/search`**: Search and rank memories within a scope.
+   - **`POST /api/v1/memory/consolidate`**: Merge semantic duplicates and clean expired TTL records.
+   - **`DELETE /api/v1/memory/{id}`**: Delete a specific memory item.
+   - **`GET /api/v1/memory/stats`**: Retrieve scope and memory type metrics.
+
+---
+
 ## 🤖 Built-In Tools & Security Hardening
 
 - **Calculator Tool (`calculator`)**:
@@ -539,7 +641,7 @@ Example multi-agent response:
 
 Execute the automated test suite with `pytest`:
 ```bash
-# Run all 133 tests
+# Run all 158 tests
 pytest -v
 
 # Run linting check and code formatting verification
@@ -547,7 +649,7 @@ ruff check .
 ruff format --check .
 ```
 
-All 133 unit and integration tests run offline with zero external API calls or paid credentials.
+All 158 unit and integration tests run offline with zero external API calls or paid credentials.
 
 ---
 
@@ -586,8 +688,8 @@ The platform is engineered iteratively phase-by-phase. Future development will f
   - Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing, and REST APIs.
 - **Phase 5 — RAG & Knowledge System** *(Completed)*
   - Document parsing (.txt, .md, .pdf), RecursiveChunker, Local ONNX embeddings (`all-MiniLM-L6-v2`), persistent ChromaVectorStore, BM25 + dense hybrid search with Reciprocal Rank Fusion (RRF), `KnowledgeSearchTool`, and REST APIs.
-- **Phase 6 — Memory & Human-in-the-Loop**
-  - State checkpointing, long-term episodic memory, interruption breakpoints, and human review gates.
+- **Phase 6 — Memory & Human-in-the-Loop** *(Completed)*
+  - Persistent working memory (PostgreSQL `AsyncPostgresSaver` / in-memory testing), long-term semantic memory (isolated Chroma `agent_memory`, composite ranking $0.65\text{sim} + 0.25\text{imp} + 0.10\text{recency}$, selective extraction, duplicate consolidation), supervisor memory injection, native LangGraph `interrupt()` approval gates, and thread-aware HITL REST APIs (`GET /api/v1/hitl/pending/{thread_id}`, `POST /api/v1/hitl/resume/{thread_id}`).
 - **Phase 7 — Observability, Guardrails & Evaluation**
   - OpenTelemetry distributed tracing, LLM cost/latency tracking, security guardrails, and automated evaluation suites.
 - **Phase 8 — Production Deployment & Portfolio Polish**

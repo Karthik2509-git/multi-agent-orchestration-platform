@@ -15,3 +15,4 @@ class OrchestrationState(TypedDict, total=False):
     final_answer: str
     status: str
     metadata: Dict[str, Any]
+    memories_used: List[Dict[str, Any]]
