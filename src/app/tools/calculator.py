@@ -84,35 +84,44 @@ class CalculatorTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         """Execute calculation safely."""
-        expression = kwargs.get("expression", "")
-        if not expression or not isinstance(expression, str):
-            return ToolResult(
-                success=False,
-                error="Invalid input: 'expression' must be a non-empty string",
-            )
+        from src.app.observability import set_span_attributes, trace_tool_execution
 
-        trimmed = expression.strip()
-        if len(trimmed) > 300:
-            return ToolResult(
-                success=False,
-                error="Expression exceeds maximum character length of 300",
-            )
+        async with trace_tool_execution(tool_name=self.name, tool_type="native") as span:
+            expression = kwargs.get("expression", "")
+            if not expression or not isinstance(expression, str):
+                set_span_attributes(span, {"status": "error", "error_category": "invalid_input"})
+                return ToolResult(
+                    success=False,
+                    error="Invalid input: 'expression' must be a non-empty string",
+                )
 
-        logger.info("Executing calculator tool with expression: %s", trimmed)
+            trimmed = expression.strip()
+            if len(trimmed) > 300:
+                set_span_attributes(span, {"status": "error", "error_category": "length_limit"})
+                return ToolResult(
+                    success=False,
+                    error="Expression exceeds maximum character length of 300",
+                )
 
-        try:
-            parsed = ast.parse(trimmed, mode="eval")
-            result = self._eval_node(parsed)
-            return ToolResult(
-                success=True,
-                data={"expression": trimmed, "result": result},
-            )
-        except ZeroDivisionError as zde:
-            logger.warning("Calculator ZeroDivisionError: %s", str(zde))
-            return ToolResult(success=False, error="Calculation error: Division by zero")
-        except (SyntaxError, ValueError, OverflowError) as err:
-            logger.warning("Calculator evaluation error: %s", str(err))
-            return ToolResult(success=False, error=f"Calculation error: {str(err)}")
-        except Exception as ex:
-            logger.error("Unexpected calculator error: %s", str(ex))
-            return ToolResult(success=False, error=f"Unexpected calculation error: {str(ex)}")
+            logger.info("Executing calculator tool with expression: %s", trimmed)
+
+            try:
+                parsed = ast.parse(trimmed, mode="eval")
+                result = self._eval_node(parsed)
+                set_span_attributes(span, {"status": "success"})
+                return ToolResult(
+                    success=True,
+                    data={"expression": trimmed, "result": result},
+                )
+            except ZeroDivisionError as zde:
+                logger.warning("Calculator ZeroDivisionError: %s", str(zde))
+                set_span_attributes(span, {"status": "error", "error_category": "zero_division"})
+                return ToolResult(success=False, error="Calculation error: Division by zero")
+            except (SyntaxError, ValueError, OverflowError) as err:
+                logger.warning("Calculator evaluation error: %s", str(err))
+                set_span_attributes(span, {"status": "error", "error_category": "eval_error"})
+                return ToolResult(success=False, error=f"Calculation error: {str(err)}")
+            except Exception as ex:
+                logger.error("Unexpected calculator error: %s", str(ex))
+                set_span_attributes(span, {"status": "error", "error_category": "unexpected_error"})
+                return ToolResult(success=False, error=f"Unexpected calculation error: {str(ex)}")

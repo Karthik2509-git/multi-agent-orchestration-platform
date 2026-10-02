@@ -101,13 +101,37 @@ class RAGService:
         strategy: Optional[str] = None,
     ) -> List[RetrievalResult]:
         """Retrieve most relevant chunks for a search query."""
+        import time
+
+        from src.app.observability import record_span_error, set_span_attributes, trace_span
+
         k = top_k or self.settings.rag_default_top_k
-        return await self.retriever.retrieve(
-            query=query,
-            top_k=k,
-            filter_metadata=filter_metadata,
-            strategy=strategy,
-        )
+        strat = strategy or "hybrid"
+
+        async with trace_span("rag.retrieve", attributes={"strategy": strat, "top_k": k}) as span:
+            start_time = time.perf_counter()
+            try:
+                results = await self.retriever.retrieve(
+                    query=query,
+                    top_k=k,
+                    filter_metadata=filter_metadata,
+                    strategy=strategy,
+                )
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                set_span_attributes(
+                    span,
+                    {
+                        "result_count": len(results),
+                        "status": "success",
+                        "duration_ms": duration_ms,
+                    },
+                )
+                return results
+            except Exception as e:
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                set_span_attributes(span, {"status": "error", "duration_ms": duration_ms})
+                record_span_error(span, e)
+                raise
 
     async def query(
         self,

@@ -14,6 +14,7 @@ from src.app.llm.factory import get_llm_provider
 from src.app.memory.service import MemoryService, get_memory_service
 from src.app.memory.working_memory import get_checkpointer
 from src.app.models.schemas.orchestration import OrchestrationRunResponse
+from src.app.observability import record_span_error, set_span_attributes, trace_span
 from src.app.orchestration.graph import build_orchestration_graph
 from src.app.orchestration.state import OrchestrationState
 from src.app.tools.calculator import CalculatorTool
@@ -95,93 +96,142 @@ async def run_orchestrated_task(
         task[:80],
     )
 
-    try:
-        final_state = await graph.ainvoke(initial_state, config=config)
-        execution_time = round(time.perf_counter() - start_time, 3)
+    initial_attrs = {
+        "thread_id": active_thread_id,
+        "task_chars": len(task),
+        "scope_id": scope_id,
+        "require_human_review": require_human_review,
+    }
 
-        # Inspect if execution was paused by an interrupt
-        snapshot = await graph.aget_state(config)
-        is_interrupted = False
-        pending_approval_payload = None
+    async with trace_span("orchestration.run", attributes=initial_attrs) as span:
+        try:
+            final_state = await graph.ainvoke(initial_state, config=config)
+            execution_time = round(time.perf_counter() - start_time, 3)
 
-        if snapshot and getattr(snapshot, "tasks", None):
-            for t in snapshot.tasks:
-                if hasattr(t, "interrupts") and t.interrupts:
+            # Inspect if execution was paused by an interrupt
+            snapshot = await graph.aget_state(config)
+            is_interrupted = False
+            pending_approval_payload = None
+
+            if snapshot and getattr(snapshot, "tasks", None):
+                for t in snapshot.tasks:
+                    if hasattr(t, "interrupts") and t.interrupts:
+                        is_interrupted = True
+                        first_int = t.interrupts[0]
+                        pending_approval_payload = (
+                            first_int.value if hasattr(first_int, "value") else first_int
+                        )
+                        break
+
+            if (
+                not is_interrupted
+                and isinstance(final_state, dict)
+                and "__interrupt__" in final_state
+            ):
+                interrupts = final_state["__interrupt__"]
+                if interrupts:
                     is_interrupted = True
-                    first_int = t.interrupts[0]
+                    first_int = interrupts[0]
                     pending_approval_payload = (
                         first_int.value if hasattr(first_int, "value") else first_int
                     )
-                    break
 
-        if not is_interrupted and isinstance(final_state, dict) and "__interrupt__" in final_state:
-            interrupts = final_state["__interrupt__"]
-            if interrupts:
-                is_interrupted = True
-                first_int = interrupts[0]
-                pending_approval_payload = (
-                    first_int.value if hasattr(first_int, "value") else first_int
+            if is_interrupted:
+                logger.info(
+                    "Workflow paused on thread '%s' awaiting human review.", active_thread_id
+                )
+                agents_used_interrupted = (
+                    final_state.get("agents_used", []) if isinstance(final_state, dict) else []
+                )
+                set_span_attributes(
+                    span,
+                    {
+                        "status": "interrupted",
+                        "agents_used": agents_used_interrupted,
+                        "execution_time_seconds": execution_time,
+                    },
+                )
+                return OrchestrationRunResponse(
+                    task=task,
+                    answer="Execution paused awaiting human review.",
+                    thread_id=active_thread_id,
+                    agents_used=agents_used_interrupted,
+                    status="interrupted",
+                    execution_time_seconds=execution_time,
+                    memories_used=(
+                        final_state.get("memories_used", [])
+                        if isinstance(final_state, dict)
+                        else []
+                    ),
+                    pending_approval=pending_approval_payload,
+                    metadata=metadata,
                 )
 
-        if is_interrupted:
-            logger.info("Workflow paused on thread '%s' awaiting human review.", active_thread_id)
-            return OrchestrationRunResponse(
-                task=task,
-                answer="Execution paused awaiting human review.",
-                thread_id=active_thread_id,
-                agents_used=(
-                    final_state.get("agents_used", []) if isinstance(final_state, dict) else []
-                ),
-                status="interrupted",
-                execution_time_seconds=execution_time,
-                memories_used=(
-                    final_state.get("memories_used", []) if isinstance(final_state, dict) else []
-                ),
-                pending_approval=pending_approval_payload,
-                metadata=metadata,
+            answer_text = (
+                final_state.get("final_answer")
+                if isinstance(final_state, dict) and final_state.get("final_answer")
+                else "No answer produced."
+            )
+            status_text = (
+                final_state.get("status", "completed")
+                if isinstance(final_state, dict)
+                else "completed"
+            )
+            agents_used_list = (
+                final_state.get("agents_used", []) if isinstance(final_state, dict) else []
+            )
+            memories_used_list = (
+                final_state.get("memories_used", []) if isinstance(final_state, dict) else []
+            )
+            step_count_val = (
+                final_state.get("step_count", 0) if isinstance(final_state, dict) else 0
             )
 
-        answer_text = (
-            final_state.get("final_answer")
-            if isinstance(final_state, dict) and final_state.get("final_answer")
-            else "No answer produced."
-        )
-        status_text = (
-            final_state.get("status", "completed") if isinstance(final_state, dict) else "completed"
-        )
-        agents_used_list = (
-            final_state.get("agents_used", []) if isinstance(final_state, dict) else []
-        )
-        memories_used_list = (
-            final_state.get("memories_used", []) if isinstance(final_state, dict) else []
-        )
+            set_span_attributes(
+                span,
+                {
+                    "status": status_text,
+                    "agents_used": agents_used_list,
+                    "step_count": step_count_val,
+                    "answer_chars": len(answer_text),
+                    "execution_time_seconds": execution_time,
+                },
+            )
 
-        logger.info(
-            "Multi-agent orchestration completed in %.2fs with status '%s'. Agents used: %s",
-            execution_time,
-            status_text,
-            agents_used_list,
-        )
+            logger.info(
+                "Multi-agent orchestration completed in %.2fs with status '%s'. Agents used: %s",
+                execution_time,
+                status_text,
+                agents_used_list,
+            )
 
-        return OrchestrationRunResponse(
-            task=task,
-            answer=answer_text,
-            thread_id=active_thread_id,
-            agents_used=agents_used_list,
-            status=status_text,
-            execution_time_seconds=execution_time,
-            memories_used=memories_used_list,
-            metadata=final_state.get("metadata") if isinstance(final_state, dict) else metadata,
-        )
-    except Exception as e:
-        execution_time = round(time.perf_counter() - start_time, 3)
-        logger.error("Multi-agent orchestration failed after %.2fs: %s", execution_time, str(e))
-        return OrchestrationRunResponse(
-            task=task,
-            answer=f"Orchestration failed: {str(e)}",
-            thread_id=active_thread_id,
-            agents_used=initial_state.get("agents_used", []),
-            status="error",
-            execution_time_seconds=execution_time,
-            metadata={"error": str(e)},
-        )
+            return OrchestrationRunResponse(
+                task=task,
+                answer=answer_text,
+                thread_id=active_thread_id,
+                agents_used=agents_used_list,
+                status=status_text,
+                execution_time_seconds=execution_time,
+                memories_used=memories_used_list,
+                metadata=final_state.get("metadata") if isinstance(final_state, dict) else metadata,
+            )
+        except Exception as e:
+            execution_time = round(time.perf_counter() - start_time, 3)
+            logger.error("Multi-agent orchestration failed after %.2fs: %s", execution_time, str(e))
+            record_span_error(span, e)
+            set_span_attributes(
+                span,
+                {
+                    "status": "error",
+                    "execution_time_seconds": execution_time,
+                },
+            )
+            return OrchestrationRunResponse(
+                task=task,
+                answer=f"Orchestration failed: {str(e)}",
+                thread_id=active_thread_id,
+                agents_used=initial_state.get("agents_used", []),
+                status="error",
+                execution_time_seconds=execution_time,
+                metadata={"error": str(e)},
+            )

@@ -16,6 +16,7 @@ from src.app.core.logging import get_logger
 from src.app.hitl.policies import EscalationPolicy
 from src.app.llm.base import LLMProvider
 from src.app.memory.service import MemoryService
+from src.app.observability import set_span_attributes, trace_span
 from src.app.orchestration.state import OrchestrationState
 from src.app.tools.calculator import CalculatorTool
 from src.app.tools.http_tool import SafeHTTPGetTool
@@ -50,38 +51,48 @@ def build_orchestration_graph(
         memories_used: List[Dict[str, Any]] = []
 
         if memory_service and task:
-            try:
-                results = await memory_service.search_memories(
-                    query=task,
-                    scope_id=scope_id,
-                    top_k=3,
-                )
-                if results:
-                    for r in results:
-                        memories_used.append(
+            async with trace_span(
+                "memory.retrieve",
+                attributes={"scope_id": scope_id, "top_k": 3},
+            ) as span:
+                try:
+                    results = await memory_service.search_memories(
+                        query=task,
+                        scope_id=scope_id,
+                        top_k=3,
+                    )
+                    if results:
+                        for r in results:
+                            memories_used.append(
+                                {
+                                    "id": r.memory.id,
+                                    "content": r.memory.content,
+                                    "type": r.memory.memory_type.value,
+                                    "importance": r.memory.importance,
+                                    "score": r.score,
+                                }
+                            )
+                        # Inject formatted memory context into messages
+                        formatted_memories = memory_service.retriever.format_for_planning(results)
+                        messages = list(state.get("messages", []))
+                        messages.append(
                             {
-                                "id": r.memory.id,
-                                "content": r.memory.content,
-                                "type": r.memory.memory_type.value,
-                                "importance": r.memory.importance,
-                                "score": r.score,
+                                "role": "system",
+                                "content": f"[Long-Term Memory Context]\n{formatted_memories}",
                             }
                         )
-                    # Inject formatted memory context into messages
-                    formatted_memories = memory_service.retriever.format_for_planning(results)
-                    messages = list(state.get("messages", []))
-                    messages.append(
-                        {
-                            "role": "system",
-                            "content": f"[Long-Term Memory Context]\n{formatted_memories}",
+                        set_span_attributes(
+                            span,
+                            {"hit_count": len(results), "status": "success"},
+                        )
+                        return {
+                            "memories_used": memories_used,
+                            "messages": messages,
                         }
-                    )
-                    return {
-                        "memories_used": memories_used,
-                        "messages": messages,
-                    }
-            except Exception as e:
-                logger.warning("Memory retrieval before planning failed: %s", e)
+                    set_span_attributes(span, {"hit_count": 0, "status": "success"})
+                except Exception as e:
+                    logger.warning("Memory retrieval before planning failed: %s", e)
+                    set_span_attributes(span, {"status": "error", "error.type": type(e).__name__})
 
         return {"memories_used": memories_used}
 
@@ -100,11 +111,23 @@ def build_orchestration_graph(
                 "metadata": metadata,
             }
 
-        decision = await supervisor.decide_route(state)
-        return {
-            "next_agent": decision.next_agent,
-            "step_count": step_count + 1,
-        }
+        async with trace_span(
+            "supervisor.decide_route",
+            attributes={"step_count": step_count},
+        ) as span:
+            decision = await supervisor.decide_route(state)
+            set_span_attributes(
+                span,
+                {
+                    "selected_route": decision.next_agent,
+                    "allowed_route": decision.next_agent in ("research", "data", "code", "final"),
+                    "status": "success",
+                },
+            )
+            return {
+                "next_agent": decision.next_agent,
+                "step_count": step_count + 1,
+            }
 
     def route_decision(state: OrchestrationState) -> str:
         next_agent = state.get("next_agent", "final")
@@ -140,7 +163,16 @@ def build_orchestration_graph(
             }
 
             # Pause graph execution and wait for Command(resume=...)
-            human_decision = interrupt(interrupt_payload)
+            async with trace_span(
+                "hitl.interrupt",
+                attributes={
+                    "interrupt_id": interrupt_payload["interrupt_id"],
+                    "approval_level": level.value,
+                    "reason_category": reason[:80],
+                    "status": "interrupted",
+                },
+            ):
+                human_decision = interrupt(interrupt_payload)
 
             if isinstance(human_decision, dict):
                 decision_val = human_decision.get("decision", "approve")
@@ -195,40 +227,73 @@ def build_orchestration_graph(
         return {"metadata": metadata}
 
     async def research_node(state: OrchestrationState) -> Dict[str, Any]:
-        result = await research_agent.run(state.get("task", ""), state)
-        agent_results = dict(state.get("agent_results", {}))
-        agent_results[result.agent] = result.result
-        agents_used = list(state.get("agents_used", []))
-        if result.agent not in agents_used:
-            agents_used.append(result.agent)
-        return {
-            "agent_results": agent_results,
-            "agents_used": agents_used,
-        }
+        async with trace_span(
+            "agent.execute",
+            attributes={"agent_name": "research", "step_number": state.get("step_count", 0)},
+        ) as span:
+            result = await research_agent.run(state.get("task", ""), state)
+            set_span_attributes(
+                span,
+                {
+                    "status": result.status,
+                    "result_chars": len(result.result) if result.result else 0,
+                },
+            )
+            agent_results = dict(state.get("agent_results", {}))
+            agent_results[result.agent] = result.result
+            agents_used = list(state.get("agents_used", []))
+            if result.agent not in agents_used:
+                agents_used.append(result.agent)
+            return {
+                "agent_results": agent_results,
+                "agents_used": agents_used,
+            }
 
     async def data_node(state: OrchestrationState) -> Dict[str, Any]:
-        result = await data_agent.run(state.get("task", ""), state)
-        agent_results = dict(state.get("agent_results", {}))
-        agent_results[result.agent] = result.result
-        agents_used = list(state.get("agents_used", []))
-        if result.agent not in agents_used:
-            agents_used.append(result.agent)
-        return {
-            "agent_results": agent_results,
-            "agents_used": agents_used,
-        }
+        async with trace_span(
+            "agent.execute",
+            attributes={"agent_name": "data", "step_number": state.get("step_count", 0)},
+        ) as span:
+            result = await data_agent.run(state.get("task", ""), state)
+            set_span_attributes(
+                span,
+                {
+                    "status": result.status,
+                    "result_chars": len(result.result) if result.result else 0,
+                },
+            )
+            agent_results = dict(state.get("agent_results", {}))
+            agent_results[result.agent] = result.result
+            agents_used = list(state.get("agents_used", []))
+            if result.agent not in agents_used:
+                agents_used.append(result.agent)
+            return {
+                "agent_results": agent_results,
+                "agents_used": agents_used,
+            }
 
     async def code_node(state: OrchestrationState) -> Dict[str, Any]:
-        result = await code_agent.run(state.get("task", ""), state)
-        agent_results = dict(state.get("agent_results", {}))
-        agent_results[result.agent] = result.result
-        agents_used = list(state.get("agents_used", []))
-        if result.agent not in agents_used:
-            agents_used.append(result.agent)
-        return {
-            "agent_results": agent_results,
-            "agents_used": agents_used,
-        }
+        async with trace_span(
+            "agent.execute",
+            attributes={"agent_name": "code", "step_number": state.get("step_count", 0)},
+        ) as span:
+            result = await code_agent.run(state.get("task", ""), state)
+            set_span_attributes(
+                span,
+                {
+                    "status": result.status,
+                    "result_chars": len(result.result) if result.result else 0,
+                },
+            )
+            agent_results = dict(state.get("agent_results", {}))
+            agent_results[result.agent] = result.result
+            agents_used = list(state.get("agents_used", []))
+            if result.agent not in agents_used:
+                agents_used.append(result.agent)
+            return {
+                "agent_results": agent_results,
+                "agents_used": agents_used,
+            }
 
     async def final_node(state: OrchestrationState) -> Dict[str, Any]:
         metadata = dict(state.get("metadata", {}))
@@ -238,42 +303,73 @@ def build_orchestration_graph(
         if state.get("final_answer"):
             agents_used = list(state.get("agents_used", []))
             status_val = state.get("status", "completed")
-            return {
-                "final_answer": state["final_answer"],
-                "status": status_val,
-                "agents_used": agents_used,
-                "metadata": metadata,
-            }
+            async with trace_span(
+                "final.synthesis",
+                attributes={
+                    "status": status_val,
+                    "answer_chars": len(state["final_answer"]),
+                    "memory_extraction": False,
+                },
+            ):
+                return {
+                    "final_answer": state["final_answer"],
+                    "status": status_val,
+                    "agents_used": agents_used,
+                    "metadata": metadata,
+                }
 
-        result = await final_agent.run(state.get("task", ""), state)
-        agents_used = list(state.get("agents_used", []))
-        if result.agent not in agents_used:
-            agents_used.append(result.agent)
+        async with trace_span(
+            "agent.execute",
+            attributes={"agent_name": "final", "step_number": state.get("step_count", 0)},
+        ) as agent_span:
+            result = await final_agent.run(state.get("task", ""), state)
+            set_span_attributes(
+                agent_span,
+                {
+                    "status": result.status,
+                    "result_chars": len(result.result) if result.result else 0,
+                },
+            )
+            agents_used = list(state.get("agents_used", []))
+            if result.agent not in agents_used:
+                agents_used.append(result.agent)
 
-        final_answer = result.result
-        status_val = "completed" if result.status == "success" else "error"
+            final_answer = result.result
+            status_val = "completed" if result.status == "success" else "error"
 
-        # Extract and persist long-term memories strictly if memory service is configured,
-        # status is completed, and the workflow was not rejected
-        if memory_service and status_val == "completed" and human_decision != "rejected":
-            try:
-                task = state.get("task", "")
-                scope_id = metadata.get("scope_id", "default")
-                await memory_service.extract_and_store_memories(
-                    task=task,
-                    final_answer=final_answer,
-                    agent_results=state.get("agent_results"),
-                    scope_id=scope_id,
-                )
-            except Exception as e:
-                logger.warning("Post-task memory extraction failed: %s", e)
+            will_extract = bool(
+                memory_service and status_val == "completed" and human_decision != "rejected"
+            )
 
-        return {
-            "final_answer": final_answer,
-            "status": status_val,
-            "agents_used": agents_used,
-            "metadata": metadata,
-        }
+            async with trace_span(
+                "final.synthesis",
+                attributes={
+                    "status": status_val,
+                    "answer_chars": len(final_answer) if final_answer else 0,
+                    "memory_extraction": will_extract,
+                },
+            ):
+                # Extract and persist long-term memories strictly if memory service is configured,
+                # status is completed, and the workflow was not rejected
+                if will_extract and memory_service:
+                    try:
+                        task = state.get("task", "")
+                        scope_id = metadata.get("scope_id", "default")
+                        await memory_service.extract_and_store_memories(
+                            task=task,
+                            final_answer=final_answer,
+                            agent_results=state.get("agent_results"),
+                            scope_id=scope_id,
+                        )
+                    except Exception as e:
+                        logger.warning("Post-task memory extraction failed: %s", e)
+
+                return {
+                    "final_answer": final_answer,
+                    "status": status_val,
+                    "agents_used": agents_used,
+                    "metadata": metadata,
+                }
 
     # Assemble StateGraph
     workflow = StateGraph(OrchestrationState)

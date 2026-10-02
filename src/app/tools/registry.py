@@ -1,8 +1,8 @@
-"""Tool registry managing tool lifecycle, schemas, and execution."""
-
+import time
 from typing import Any, Dict, List, Optional
 
 from src.app.core.logging import get_logger
+from src.app.observability import record_span_error, set_span_attributes, trace_tool_execution
 from src.app.tools.base import BaseTool, ToolResult
 
 logger = get_logger(__name__)
@@ -52,12 +52,43 @@ class ToolRegistry:
                 error=f"Tool '{name}' is not registered. Available tools: {available}",
             )
 
-        try:
-            logger.info("Executing tool '%s' with arguments: %s", name, arguments)
-            return await tool.execute(**arguments)
-        except Exception as e:
-            logger.error("Unhandled exception executing tool '%s': %s", name, str(e))
-            return ToolResult(
-                success=False,
-                error=f"Internal error executing tool '{name}': {str(e)}",
-            )
+        tool_type = (
+            "mcp"
+            if (getattr(tool, "source", None) == "mcp" or name.startswith("mcp."))
+            else "native"
+        )
+        extra_attrs: Dict[str, Any] = {}
+        if hasattr(tool, "server_name"):
+            extra_attrs["mcp.server_name"] = getattr(tool, "server_name")
+        if hasattr(tool, "original_name"):
+            extra_attrs["mcp.original_name"] = getattr(tool, "original_name")
+
+        async with trace_tool_execution(
+            tool_name=name,
+            tool_type=tool_type,
+            extra_attributes=extra_attrs,
+        ) as span:
+            start_time = time.perf_counter()
+            try:
+                logger.info("Executing tool '%s' with arguments: %s", name, arguments)
+                result = await tool.execute(**arguments)
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                set_span_attributes(
+                    span,
+                    {
+                        "status": "success" if result.success else "error",
+                        "duration_ms": duration_ms,
+                    },
+                )
+                if not result.success:
+                    set_span_attributes(span, {"error_category": "tool_failure"})
+                return result
+            except Exception as e:
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                logger.error("Unhandled exception executing tool '%s': %s", name, str(e))
+                record_span_error(span, e)
+                set_span_attributes(span, {"status": "error", "duration_ms": duration_ms})
+                return ToolResult(
+                    success=False,
+                    error=f"Internal error executing tool '{name}': {str(e)}",
+                )

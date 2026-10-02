@@ -28,6 +28,8 @@ class MCPToolAdapter(BaseTool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         """Execute the tool via the bound MCP client."""
+        from src.app.observability import set_span_attributes, trace_tool_execution
+
         logger.debug(
             "MCPToolAdapter executing '%s' (server: %s, original: %s) with kwargs: %s",
             self.name,
@@ -35,10 +37,27 @@ class MCPToolAdapter(BaseTool):
             self.original_name,
             kwargs,
         )
-        return await self.client.call_tool(
-            original_name=self.original_name,
-            arguments=kwargs,
-        )
+        async with trace_tool_execution(
+            tool_name=self.name,
+            tool_type="mcp",
+            extra_attributes={
+                "mcp.server_name": self.server_name,
+                "mcp.original_name": self.original_name,
+            },
+        ) as span:
+            res = await self.client.call_tool(
+                original_name=self.original_name,
+                arguments=kwargs,
+            )
+            set_span_attributes(
+                span,
+                {
+                    "status": "success" if res.success else "error",
+                    "mcp.server_name": self.server_name,
+                    "mcp.original_name": self.original_name,
+                },
+            )
+            return res
 
     def to_openai_schema(self) -> Dict[str, Any]:
         """Convert tool schema into standard OpenAI function calling format."""

@@ -11,6 +11,7 @@ from src.app.core.logging import get_logger
 from src.app.hitl.models import ApprovalLevel, HITLRequest, HITLResponse
 from src.app.hitl.policies import EscalationPolicy
 from src.app.memory.working_memory import get_checkpointer
+from src.app.observability import trace_span
 
 logger = get_logger(__name__)
 
@@ -102,10 +103,20 @@ class HITLService:
             "override_output": response.override_output,
         }
 
+        resume_attrs = {
+            "thread_id": thread_id,
+            "decision": response.decision.value,
+            "has_feedback": bool(response.feedback),
+            "has_modified_action": bool(response.modified_action),
+            "has_override": bool(response.override_output),
+            "status": "resumed",
+        }
+
         # Submit Command to resume graph execution
-        command = Command(resume=resume_payload)
-        final_state = await graph.ainvoke(command, config=config)
-        return final_state
+        async with trace_span("hitl.resume", attributes=resume_attrs):
+            command = Command(resume=resume_payload)
+            final_state = await graph.ainvoke(command, config=config)
+            return final_state
 
 
 _global_hitl_service: Optional[HITLService] = None

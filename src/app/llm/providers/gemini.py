@@ -146,45 +146,82 @@ class GeminiLLMProvider(LLMProvider):
         if gemini_tools:
             config.tools = gemini_tools
 
-        try:
-            response = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config=config,
-            )
+        import time
 
-            parsed_tool_calls: List[ToolCall] = []
-            if response.function_calls:
-                for idx, fc in enumerate(response.function_calls):
-                    call_id = f"call_{fc.name}_{idx}"
-                    parsed_tool_calls.append(
-                        ToolCall(
-                            id=call_id,
-                            name=fc.name,
-                            arguments=dict(fc.args) if fc.args else {},
-                        )
-                    )
+        from src.app.observability import record_span_error, set_span_attributes, trace_span
 
-            # Safely extract text (may be None if model returned only function calls)
-            response_text = None
+        attrs = {
+            "provider": "gemini",
+            "model": self.model,
+            "operation": "generate",
+        }
+
+        async with trace_span("llm.call", attributes=attrs) as span:
+            start_time = time.perf_counter()
             try:
-                response_text = response.text
-            except Exception:
-                # Text property may raise warning or exception when only function_call is present
-                pass
+                response = await self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                )
+                latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
-            finish_reason = "tool_calls" if parsed_tool_calls else "stop"
+                parsed_tool_calls: List[ToolCall] = []
+                if response.function_calls:
+                    for idx, fc in enumerate(response.function_calls):
+                        call_id = f"call_{fc.name}_{idx}"
+                        parsed_tool_calls.append(
+                            ToolCall(
+                                id=call_id,
+                                name=fc.name,
+                                arguments=dict(fc.args) if fc.args else {},
+                            )
+                        )
 
-            return LLMResponse(
-                content=response_text,
-                tool_calls=parsed_tool_calls,
-                model=self.model,
-                finish_reason=finish_reason,
-            )
+                # Safely extract text (may be None if model returned only function calls)
+                response_text = None
+                try:
+                    response_text = response.text
+                except Exception:
+                    # Text property may raise warning or exception
+                    # when only function_call is present
+                    pass
 
-        except errors.APIError as api_err:
-            logger.error("Gemini API invocation failed: %s", type(api_err).__name__)
-            raise RuntimeError(f"Gemini service error: {type(api_err).__name__}") from api_err
-        except Exception as ex:
-            logger.error("Unexpected Gemini error: %s", type(ex).__name__)
-            raise RuntimeError(f"Gemini provider error: {str(ex)}") from ex
+                finish_reason = "tool_calls" if parsed_tool_calls else "stop"
+
+                span_updates: Dict[str, Any] = {
+                    "status": "success",
+                    "latency_ms": latency_ms,
+                    "model": self.model,
+                }
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    um = response.usage_metadata
+                    if hasattr(um, "prompt_token_count") and um.prompt_token_count is not None:
+                        span_updates["llm.prompt_tokens"] = um.prompt_token_count
+                    if (
+                        hasattr(um, "candidates_token_count")
+                        and um.candidates_token_count is not None
+                    ):
+                        span_updates["llm.completion_tokens"] = um.candidates_token_count
+                    if hasattr(um, "total_token_count") and um.total_token_count is not None:
+                        span_updates["llm.total_tokens"] = um.total_token_count
+
+                set_span_attributes(span, span_updates)
+
+                return LLMResponse(
+                    content=response_text,
+                    tool_calls=parsed_tool_calls,
+                    model=self.model,
+                    finish_reason=finish_reason,
+                )
+
+            except errors.APIError as api_err:
+                set_span_attributes(span, {"status": "error"})
+                record_span_error(span, api_err)
+                logger.error("Gemini API invocation failed: %s", type(api_err).__name__)
+                raise RuntimeError(f"Gemini service error: {type(api_err).__name__}") from api_err
+            except Exception as ex:
+                set_span_attributes(span, {"status": "error"})
+                record_span_error(span, ex)
+                logger.error("Unexpected Gemini error: %s", type(ex).__name__)
+                raise RuntimeError(f"Gemini provider error: {str(ex)}") from ex

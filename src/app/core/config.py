@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import List, Optional, Union
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -155,6 +155,32 @@ class Settings(BaseSettings):
     hitl_confidence_threshold: float = 0.65
     hitl_max_specialist_retries: int = 2
     checkpoint_backend: str = "postgres"  # "postgres" (durable runtime) or "memory" (tests)
+
+    # Observability & Tracing Settings (Phase 7 Milestone 1)
+    telemetry_enabled: bool = True
+    telemetry_service_name: str = "multi-agent-orchestrator"
+    telemetry_exporter: str = "memory"  # memory | console | none
+    telemetry_record_payloads: bool = False
+    telemetry_max_in_memory_spans: int = 500
+
+    @field_validator("telemetry_exporter", mode="before")
+    @classmethod
+    def validate_telemetry_exporter(cls, v: str) -> str:
+        """Ensure telemetry exporter is one of the supported modes."""
+        allowed = {"memory", "console", "none"}
+        normalized = v.strip().lower()
+        if normalized not in allowed:
+            raise ValueError(
+                f"Unsupported TELEMETRY_EXPORTER '{v}'. Allowed exporters: {sorted(allowed)}"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def enforce_production_telemetry_safety(self) -> "Settings":
+        """Strictly force telemetry_record_payloads to False in production environments."""
+        if self.app_env.lower() == "production" and self.telemetry_record_payloads:
+            self.telemetry_record_payloads = False
+        return self
 
 
 @lru_cache

@@ -32,19 +32,40 @@ class MockLLMProvider(LLMProvider):
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> LLMResponse:
         """Generate a simulated response."""
-        self.history.append({"messages": messages, "tools": tools})
+        import time
 
-        if self.handler:
-            return self.handler(messages, tools)
+        from src.app.observability import set_span_attributes, trace_span
 
-        if self.responses:
-            return self.responses.pop(0)
+        attrs = {
+            "provider": "mock",
+            "model": self.model,
+            "operation": "generate",
+        }
 
-        # Default fallback response if nothing is queued
-        last_message = messages[-1]["content"] if messages else ""
-        return LLMResponse(
-            content=f"Mock response to: {last_message}",
-            tool_calls=[],
-            model=self.model,
-            finish_reason="stop",
-        )
+        async with trace_span("llm.call", attributes=attrs) as span:
+            start_time = time.perf_counter()
+            self.history.append({"messages": messages, "tools": tools})
+
+            if self.handler:
+                resp = self.handler(messages, tools)
+            elif self.responses:
+                resp = self.responses.pop(0)
+            else:
+                # Default fallback response if nothing is queued
+                last_message = messages[-1]["content"] if messages else ""
+                resp = LLMResponse(
+                    content=f"Mock response to: {last_message}",
+                    tool_calls=[],
+                    model=self.model,
+                    finish_reason="stop",
+                )
+
+            latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            set_span_attributes(
+                span,
+                {
+                    "status": "success",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return resp

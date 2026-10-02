@@ -5,12 +5,14 @@ from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from src.app.api.v1.api import api_v1_router
 from src.app.core.config import Settings, get_settings
 from src.app.core.logging import get_logger, setup_logging
 from src.app.memory.working_memory import close_checkpointer, init_checkpointer
 from src.app.models.schemas.health import HealthResponse
+from src.app.observability import init_telemetry, shutdown_telemetry
 from src.app.services.health import get_health_status
 from src.app.services.mcp_service import get_mcp_service
 
@@ -30,6 +32,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_env,
     )
 
+    # Initialize telemetry subsystem
+    init_telemetry(settings)
+
     # Initialize checkpointer pool if configured
     await init_checkpointer(settings)
 
@@ -47,6 +52,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Teardown checkpointer pool
     await close_checkpointer()
 
+    # Teardown telemetry subsystem
+    shutdown_telemetry()
+
     logger.info("Shutting down %s", settings.app_name)
 
 
@@ -62,6 +70,13 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug or settings.app_env != "production" else None,
         lifespan=lifespan,
     )
+
+    # Instrument with OpenTelemetry if enabled
+    if settings.telemetry_enabled:
+        FastAPIInstrumentor.instrument_app(
+            app,
+            excluded_urls="docs,redoc,openapi.json",
+        )
 
     # Configure CORS with explicitly configured allowed origins
     app.add_middleware(

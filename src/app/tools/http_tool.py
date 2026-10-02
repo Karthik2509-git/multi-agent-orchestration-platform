@@ -120,75 +120,91 @@ class SafeHTTPGetTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         """Execute a safe HTTP GET request with size and redirect protections."""
-        url = kwargs.get("url", "")
-        if not url or not isinstance(url, str):
-            return ToolResult(
-                success=False,
-                error="Invalid input: 'url' must be a non-empty string",
-            )
+        from src.app.observability import set_span_attributes, trace_tool_execution
 
-        url = url.strip()
-        validation_error = self._validate_and_resolve_url(url)
-        if validation_error:
-            logger.warning("SafeHTTPGetTool rejected request to %s: %s", url, validation_error)
-            return ToolResult(success=False, error=validation_error)
+        async with trace_tool_execution(tool_name=self.name, tool_type="native") as span:
+            url = kwargs.get("url", "")
+            if not url or not isinstance(url, str):
+                set_span_attributes(span, {"status": "error", "error_category": "invalid_input"})
+                return ToolResult(
+                    success=False,
+                    error="Invalid input: 'url' must be a non-empty string",
+                )
 
-        logger.info("Executing Safe HTTP GET request to %s", url)
+            url = url.strip()
+            validation_error = self._validate_and_resolve_url(url)
+            if validation_error:
+                logger.warning("SafeHTTPGetTool rejected request to %s: %s", url, validation_error)
+                set_span_attributes(span, {"status": "error", "error_category": "validation_error"})
+                return ToolResult(success=False, error=validation_error)
 
-        try:
-            # Disable redirects to prevent redirect-based SSRF attacks
-            async with httpx.AsyncClient(
-                follow_redirects=False,
-                timeout=self.timeout,
-            ) as client:
-                async with client.stream("GET", url) as response:
-                    # Enforce body size limits to prevent LLM context exhaustion
-                    content_chunks = []
-                    bytes_read = 0
-                    truncated = False
+            logger.info("Executing Safe HTTP GET request to %s", url)
 
-                    async for chunk in response.aiter_bytes():
-                        bytes_read += len(chunk)
-                        if bytes_read > self.max_size_bytes:
-                            # Truncate content
-                            remaining = self.max_size_bytes - (bytes_read - len(chunk))
-                            if remaining > 0:
-                                content_chunks.append(chunk[:remaining])
-                            truncated = True
-                            break
-                        content_chunks.append(chunk)
+            try:
+                # Disable redirects to prevent redirect-based SSRF attacks
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=self.timeout,
+                ) as client:
+                    async with client.stream("GET", url) as response:
+                        # Enforce body size limits to prevent LLM context exhaustion
+                        content_chunks = []
+                        bytes_read = 0
+                        truncated = False
 
-                    raw_body = b"".join(content_chunks)
-                    body_text = raw_body.decode("utf-8", errors="replace")
+                        async for chunk in response.aiter_bytes():
+                            bytes_read += len(chunk)
+                            if bytes_read > self.max_size_bytes:
+                                # Truncate content
+                                remaining = self.max_size_bytes - (bytes_read - len(chunk))
+                                if remaining > 0:
+                                    content_chunks.append(chunk[:remaining])
+                                truncated = True
+                                break
+                            content_chunks.append(chunk)
 
-                    result_data = {
-                        "url": str(response.url),
-                        "status_code": response.status_code,
-                        "truncated": truncated,
-                        "bytes_read": len(raw_body),
-                        "content": body_text,
-                    }
+                        raw_body = b"".join(content_chunks)
+                        body_text = raw_body.decode("utf-8", errors="replace")
 
-                    if 300 <= response.status_code < 400:
-                        location = response.headers.get("location", "")
-                        result_data["note"] = (
-                            f"Redirect to '{location}' was not followed for security reasons."
+                        result_data = {
+                            "url": str(response.url),
+                            "status_code": response.status_code,
+                            "truncated": truncated,
+                            "bytes_read": len(raw_body),
+                            "content": body_text,
+                        }
+
+                        if 300 <= response.status_code < 400:
+                            location = response.headers.get("location", "")
+                            result_data["note"] = (
+                                f"Redirect to '{location}' was not followed for security reasons."
+                            )
+
+                        set_span_attributes(
+                            span,
+                            {
+                                "status": "success",
+                                "http.status_code": response.status_code,
+                                "bytes_read": len(raw_body),
+                            },
                         )
+                        return ToolResult(success=True, data=result_data)
 
-                    return ToolResult(success=True, data=result_data)
-
-        except httpx.TimeoutException:
-            logger.warning("HTTP request to %s timed out after %ss", url, self.timeout)
-            return ToolResult(
-                success=False,
-                error=f"HTTP request timed out after {self.timeout} seconds",
-            )
-        except httpx.RequestError as req_err:
-            logger.warning("HTTP request to %s failed: %s", url, str(req_err))
-            return ToolResult(
-                success=False,
-                error=f"HTTP connection error: {str(req_err)}",
-            )
-        except Exception as ex:
-            logger.error("Unexpected error in SafeHTTPGetTool for %s: %s", url, str(ex))
-            return ToolResult(success=False, error=f"Unexpected HTTP tool error: {str(ex)}")
+            except httpx.TimeoutException:
+                logger.warning("HTTP request to %s timed out after %ss", url, self.timeout)
+                set_span_attributes(span, {"status": "error", "error_category": "timeout"})
+                return ToolResult(
+                    success=False,
+                    error=f"HTTP request timed out after {self.timeout} seconds",
+                )
+            except httpx.RequestError as req_err:
+                logger.warning("HTTP request to %s failed: %s", url, str(req_err))
+                set_span_attributes(span, {"status": "error", "error_category": "connection_error"})
+                return ToolResult(
+                    success=False,
+                    error=f"HTTP connection error: {str(req_err)}",
+                )
+            except Exception as ex:
+                logger.error("Unexpected error in SafeHTTPGetTool for %s: %s", url, str(ex))
+                set_span_attributes(span, {"status": "error", "error_category": "unexpected_error"})
+                return ToolResult(success=False, error=f"Unexpected HTTP tool error: {str(ex)}")
