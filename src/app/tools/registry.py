@@ -20,9 +20,24 @@ logger = get_logger(__name__)
 class ToolRegistry:
     """Central registry for registering, discovering, and executing agent tools."""
 
-    def __init__(self, guardrails: Optional[ToolGuardrails] = None) -> None:
+    def __init__(
+        self,
+        guardrails: Optional[ToolGuardrails] = None,
+        mock_tool_results: Optional[Dict[str, Any]] = None,
+    ) -> None:
         self._tools: Dict[str, BaseTool] = {}
         self.guardrails = guardrails or ToolGuardrails()
+        self._mock_tool_results: Dict[str, Any] = dict(mock_tool_results or {})
+
+    def fork(self, mock_tool_results: Optional[Dict[str, Any]] = None) -> "ToolRegistry":
+        """Create an isolated clone of this registry with optional mock tool overrides."""
+        new_mocks = dict(self._mock_tool_results)
+        if mock_tool_results:
+            new_mocks.update(mock_tool_results)
+        cloned = ToolRegistry(guardrails=self.guardrails, mock_tool_results=new_mocks)
+        for tool in self._tools.values():
+            cloned.register(tool)
+        return cloned
 
     def register(self, tool: BaseTool) -> None:
         """Register a tool instance in the registry."""
@@ -143,10 +158,35 @@ class ToolRegistry:
                 record_tool_failure(tool_name=name, error="validation_error")
                 return input_error
 
-            # 6. Execute the underlying tool
+            # 6. Execute the underlying tool or substitute mock tool result
             try:
-                logger.info("Executing tool '%s' with arguments: %s", name, arguments)
-                result = await tool.execute(**arguments)
+                is_mocked = False
+                if name in self._mock_tool_results:
+                    logger.info("Using mock tool result for tool '%s'", name)
+                    raw_mock = self._mock_tool_results[name]
+                    if isinstance(raw_mock, ToolResult):
+                        result = raw_mock
+                    elif hasattr(raw_mock, "success"):
+                        result = ToolResult(
+                            success=raw_mock.success,
+                            data=getattr(raw_mock, "data", None),
+                            error=getattr(raw_mock, "error", None),
+                            error_category=getattr(raw_mock, "error_category", None),
+                        )
+                    elif isinstance(raw_mock, dict):
+                        result = ToolResult(
+                            success=raw_mock.get("success", True),
+                            data=raw_mock.get("data"),
+                            error=raw_mock.get("error"),
+                            error_category=raw_mock.get("error_category"),
+                        )
+                    else:
+                        result = ToolResult(success=True, data=raw_mock)
+                    is_mocked = True
+                else:
+                    logger.info("Executing tool '%s' with arguments: %s", name, arguments)
+                    result = await tool.execute(**arguments)
+
                 duration_s = time.perf_counter() - start_time
                 duration_ms = round(duration_s * 1000, 2)
 
@@ -165,6 +205,7 @@ class ToolRegistry:
                 span_updates: Dict[str, Any] = {
                     "status": tool_status,
                     "duration_ms": duration_ms,
+                    "is_mocked": is_mocked,
                 }
                 if error_cat:
                     span_updates["error_category"] = error_cat

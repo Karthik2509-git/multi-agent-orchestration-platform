@@ -129,6 +129,32 @@ def build_orchestration_graph(
                 "metadata": metadata,
             }
 
+        metadata = dict(state.get("metadata", {}))
+        route_override = metadata.get("supervisor_route_override")
+        if (
+            step_count == 0
+            and route_override
+            and route_override in ("research", "data", "code", "final")
+        ):
+            logger.info("Applying supervisor route override for initial step: '%s'", route_override)
+            async with trace_span(
+                "supervisor.decide_route",
+                attributes={"step_count": step_count, "is_override": True},
+            ) as span:
+                set_span_attributes(
+                    span,
+                    {
+                        "selected_route": route_override,
+                        "allowed_route": True,
+                        "is_override": True,
+                        "status": "success",
+                    },
+                )
+                return {
+                    "next_agent": route_override,
+                    "step_count": step_count + 1,
+                }
+
         async with trace_span(
             "supervisor.decide_route",
             attributes={"step_count": step_count},

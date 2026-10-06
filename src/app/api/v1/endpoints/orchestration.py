@@ -8,6 +8,7 @@ from src.app.models.schemas.orchestration import (
     OrchestrationRunRequest,
     OrchestrationRunResponse,
 )
+from src.app.replay.models import ReplayRequest, ReplayResult
 from src.app.services.orchestration_service import run_orchestrated_task
 
 logger = get_logger(__name__)
@@ -55,3 +56,33 @@ async def run_orchestration(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Orchestration encountered an internal error: {str(exc)}",
         )
+
+
+@router.post(
+    "/replay",
+    response_model=ReplayResult,
+    status_code=status.HTTP_200_OK,
+    description=(
+        "Developer execution fork / replay endpoint creating a new execution fork "
+        "from an existing checkpoint with explicitly applied modifications."
+    ),
+)
+async def replay_orchestration(
+    request: ReplayRequest,
+    settings: Settings = Depends(get_settings),
+) -> ReplayResult:
+    """Fork and replay an existing execution with validated modifications."""
+    from src.app.replay.service import get_replay_service
+
+    logger.info("Received execution replay request for thread '%s'", request.source_thread_id)
+    service = get_replay_service(settings)
+    result = await service.fork_and_replay(
+        source_thread_id=request.source_thread_id,
+        modifications=request.modifications,
+    )
+    if not result.success and result.error_category == "source_not_found":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=result.error or "Source execution thread not found.",
+        )
+    return result
