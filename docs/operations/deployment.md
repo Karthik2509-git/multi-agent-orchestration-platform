@@ -109,7 +109,7 @@ To maintain engineering integrity, the platform distinguishes between what has b
 
 | Verification Area | Method | Status |
 |---|---|---|
-| **FastAPI REST API Surface** | Automated Pytest / TestClient | ✅ Fully verified (320 tests pass) |
+| **FastAPI REST API Surface** | Automated Pytest / TestClient | ✅ Fully verified (328 tests pass) |
 | **LangGraph Multi-Agent Flow** | In-process & Mock Provider Tests | ✅ Fully verified |
 | **PostgreSQL Pool & Checkpointer** | Async unit & self-healing tests | ✅ Fully verified |
 | **Chroma Vector Ingestion & Search** | Local filesystem integration tests | ✅ Fully verified |

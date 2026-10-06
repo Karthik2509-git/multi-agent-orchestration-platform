@@ -1,0 +1,218 @@
+{
+  "benchmark_version": "1.0.0",
+  "metadata": {
+    "git_commit": "2c339bebb4bbef445a609ffbd0e06f23fa938fc6",
+    "python_version": "3.14.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "execution_mode": "100% offline execution with deterministic evaluation/invariant suites and variable local runtime measurements",
+    "iterations": 30,
+    "warmup_iterations": 3,
+    "timestamp_utc": "2026-10-06T20:26:33.552236+00:00"
+  },
+  "deterministic_results": {
+    "rag_retrieval_quality": {
+      "dataset_name": "rag_deterministic_benchmark_v1",
+      "dataset_version": "1.0.0",
+      "total_cases": 10,
+      "k": 5,
+      "mean_recall_at_5": 0.6667,
+      "mean_precision_at_5": 0.3817,
+      "mean_mrr": 0.6333,
+      "mean_context_assertion_overlap": 0.6673,
+      "groundedness_proxy_scope": "Lexical token-overlap containment proxy; not semantic entailment or NLI.",
+      "dataset_scope_note": "Deterministic retrieval evaluation across curated benchmark fixtures; not a real-world general knowledge accuracy claim.",
+      "cases": [
+        {
+          "case_id": "case-rank-1",
+          "query": "What is hybrid search in RAG?",
+          "recall_at_5": 1.0,
+          "precision_at_5": 0.3333,
+          "mrr": 1.0,
+          "context_assertion_overlap": 1.0
+        },
+        {
+          "case_id": "case-rank-3",
+          "query": "How does reciprocal rank fusion work?",
+          "recall_at_5": 1.0,
+          "precision_at_5": 0.25,
+          "mrr": 0.3333,
+          "context_assertion_overlap": 0.5714
+        },
+        {
+          "case_id": "case-no-relevant",
+          "query": "What are quantum computing error correction codes?",
+          "recall_at_5": 0.0,
+          "precision_at_5": 0.0,
+          "mrr": 0.0,
+          "context_assertion_overlap": 0.5
+        },
+        {
+          "case_id": "case-multiple-relevant",
+          "query": "Explain the components of the LangGraph multi-agent architecture.",
+          "recall_at_5": 0.6667,
+          "precision_at_5": 0.4,
+          "mrr": 1.0,
+          "context_assertion_overlap": 1.0
+        },
+        {
+          "case_id": "case-fewer-than-k",
+          "query": "What is chunk overlap in text splitting?",
+          "recall_at_5": 1.0,
+          "precision_at_5": 0.5,
+          "mrr": 1.0,
+          "context_assertion_overlap": 0.6
+        },
+        {
+          "case_id": "case-empty-relevant",
+          "query": "Describe an unindexed hypothetical concept.",
+          "recall_at_5": 0.0,
+          "precision_at_5": 0.0,
+          "mrr": 0.0,
+          "context_assertion_overlap": null
+        },
+        {
+          "case_id": "case-empty-retrieved",
+          "query": "Query that returns nothing from index.",
+          "recall_at_5": 0.0,
+          "precision_at_5": 0.0,
+          "mrr": 0.0,
+          "context_assertion_overlap": null
+        },
+        {
+          "case_id": "case-duplicate-retrieved",
+          "query": "Query with duplicated chunk returns.",
+          "recall_at_5": 1.0,
+          "precision_at_5": 0.3333,
+          "mrr": 1.0,
+          "context_assertion_overlap": null
+        },
+        {
+          "case_id": "case-grounded-overlap",
+          "query": "What is the capital of France?",
+          "recall_at_5": 1.0,
+          "precision_at_5": 1.0,
+          "mrr": 1.0,
+          "context_assertion_overlap": 1.0
+        },
+        {
+          "case_id": "case-ungrounded-overlap",
+          "query": "What is the population of Mars?",
+          "recall_at_5": 1.0,
+          "precision_at_5": 1.0,
+          "mrr": 1.0,
+          "context_assertion_overlap": 0.0
+        }
+      ]
+    }
+  },
+  "variable_runtime_results": {
+    "framework_latency": {
+      "iterations": 30,
+      "warmup_iterations": 3,
+      "unit": "milliseconds (ms)",
+      "interpretation_note": "30 measured iterations provide lightweight local distributional characterization; P99 is an approximate upper-tail observation and is not a production SLO estimate. Measurements represent host framework overhead and exclude external network/model inference.",
+      "operations": {
+        "multi_agent_orchestration": {
+          "mean_ms": 49.98,
+          "p50_ms": 48.586,
+          "p90_ms": 62.123,
+          "p99_ms": 68.228,
+          "min_ms": 38.286,
+          "max_ms": 69.367
+        },
+        "hybrid_rag_retrieval": {
+          "mean_ms": 2.434,
+          "p50_ms": 2.449,
+          "p90_ms": 3.262,
+          "p99_ms": 3.82,
+          "min_ms": 1.334,
+          "max_ms": 4.031
+        },
+        "semantic_memory_search": {
+          "mean_ms": 7.895,
+          "p50_ms": 7.485,
+          "p90_ms": 9.974,
+          "p99_ms": 10.622,
+          "min_ms": 5.836,
+          "max_ms": 10.763
+        },
+        "ast_calculator_tool": {
+          "mean_ms": 0.016,
+          "p50_ms": 0.016,
+          "p90_ms": 0.017,
+          "p99_ms": 0.018,
+          "min_ms": 0.015,
+          "max_ms": 0.019
+        }
+      }
+    }
+  },
+  "correctness_invariants": {
+    "tool_budget_and_failure_isolation": {
+      "max_tool_budget": 10,
+      "consecutive_failure_threshold": 3,
+      "budget_limit_enforced_11th_blocked": true,
+      "calls_permitted_before_budget": 10,
+      "consecutive_failure_disablement_enforced": true,
+      "disabled_tool_remains_blocked": true,
+      "streak_reset_on_success_verified": true,
+      "all_invariants_passed": true
+    },
+    "memory_scope_isolation": {
+      "tested_scopes": [
+        "tenant_infra_core",
+        "tenant_billing_audit"
+      ],
+      "scope_a_memories_stored": 2,
+      "scope_b_memories_stored": 2,
+      "scope_a_target_hits": 2,
+      "scope_b_target_hits": 2,
+      "cross_scope_leakage_count": 0,
+      "cross_scope_leakage_rate": 0.0,
+      "claim": "Deterministic verification of zero cross-scope leakage across the tested isolation scenarios.",
+      "all_invariants_passed": true
+    }
+  },
+  "cost_projections": {
+    "pricing_registry_version": "2026-09-01-v1",
+    "pricing_source": "versioned_registry",
+    "workload_type": "representative_canonical_workload_assumption",
+    "workflow_description": "Representative canonical workload assumption: 3-turn multi-agent workflow (supervisor, specialist tool, synthesis)",
+    "assumed_token_consumption": {
+      "prompt_tokens": 850,
+      "completion_tokens": 220,
+      "total_tokens": 1070
+    },
+    "projections": {
+      "gemini/gemini-2.5-flash": {
+        "provider": "gemini",
+        "model": "gemini-2.5-flash",
+        "cost_status": "known",
+        "projected_cost_usd_per_run": 0.00013,
+        "projected_cost_usd_per_1k_runs": 0.1298
+      },
+      "openai/gpt-4o-mini": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "cost_status": "known",
+        "projected_cost_usd_per_run": 0.00026,
+        "projected_cost_usd_per_1k_runs": 0.2595
+      },
+      "groq/llama-3.3-70b-versatile": {
+        "provider": "groq",
+        "model": "llama-3.3-70b-versatile",
+        "cost_status": "known",
+        "projected_cost_usd_per_run": 0.000675,
+        "projected_cost_usd_per_1k_runs": 0.6753
+      },
+      "openrouter/anthropic/claude-3-5-sonnet": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-3-5-sonnet",
+        "cost_status": "known",
+        "projected_cost_usd_per_run": 0.00585,
+        "projected_cost_usd_per_1k_runs": 5.85
+      }
+    },
+    "scope_boundary_note": "Cost projections use a fixed representative 1,070-token workload (850 prompt + 220 completion tokens) to compare the configured pricing models. No provider billing or live token usage is involved."
+  }
+}

@@ -243,7 +243,7 @@ The repository includes a single canonical demonstration script showcasing the p
 The test suite is built for **100% offline determinism** without external network calls or paid API keys.
 
 ```bash
-# Run all 320 automated tests
+# Run all 328 automated tests
 pytest tests/
 
 # Run code style and format checks
@@ -251,9 +251,28 @@ ruff check .
 ruff format --check .
 ```
 
-Current test suite status: **320 passed in ~50s** (0 failed, 0 skipped).
+Current test suite status: **328 passed in ~50s** (0 failed, 0 skipped).
 
 *Detailed test organization and methodology are documented in [docs/development/testing.md](docs/development/testing.md).*
+
+---
+
+## 📊 Benchmarks & Engineering Evidence
+
+The platform provides a standalone benchmark runner executing 100% offline with deterministic evaluation/invariant suites and variable local runtime measurements, producing verifiable engineering evidence without external API calls or inflated marketing metrics:
+
+- **Deterministic Retrieval Evaluation**: Measures hybrid search quality across curated benchmark fixtures (Recall@5: `0.6667`, Precision@5: `0.3817`, MRR: `0.6333`, Context-Assertion Overlap: `0.6673`).
+- **Local Framework Processing Characterization**: In-process runtime latency profiles ($N=30$ iterations) measuring orchestration overhead (~47ms), hybrid RAG (~2.2ms), semantic memory search (~6.5ms), and AST calculator execution (~0.013ms). *Excludes real LLM/network inference; P99 represents an approximate upper-tail observation, not a production SLO.*
+- **Run-Scoped Tool Failure Isolation**: Deterministically verifies execution limits (10 permitted calls, 11th blocked) and consecutive-failure tool disablement (3 errors disable tool; success resets streak).
+- **Deterministic Cross-Scope Memory Isolation Verification**: Verifies zero cross-scope data leakage ($0.0\%$ leakage rate across tested isolation scenarios) under Chroma metadata segregation.
+- **Versioned Token-Cost Projection**: Deterministic token expenditure projections using the versioned pricing registry (`MODEL_PRICING_REGISTRY`) under representative canonical workload assumptions.
+
+```bash
+# Execute complete benchmark suite and generate machine-readable JSON report
+python scripts/run_benchmarks.py
+```
+
+*Detailed methodology, statistical interpretations, and claim boundaries are documented in [docs/development/benchmarks.md](docs/development/benchmarks.md). Machine-readable artifact: [benchmarks/results/benchmark_report.json](benchmarks/results/benchmark_report.json).*
 
 ---
 
@@ -321,6 +340,8 @@ For detailed guides, please explore the `docs/` package:
 - [Local Development Setup](docs/development/setup.md)
 - [Configuration Reference](docs/development/configuration.md)
 - [Testing Strategy & Verification](docs/development/testing.md)
+- [Platform Benchmarks & Engineering Evidence](docs/development/benchmarks.md)
+- [Canonical Demo & Walkthrough Guide](docs/development/canonical-demo.md)
 - [Deployment & Infrastructure Operations](docs/operations/deployment.md)
 - [Health & Self-Healing Readiness Probes](docs/operations/health-and-readiness.md)
 - [Operational Troubleshooting Guide](docs/operations/troubleshooting.md)

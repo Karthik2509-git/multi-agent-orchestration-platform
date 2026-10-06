@@ -6,7 +6,7 @@ The platform maintains an automated test suite designed for **complete offline d
 
 ## 1. Test Suite Summary
 
-- **Total Automated Tests**: **320 passed** (0 failures, 0 skipped).
+- **Total Automated Tests**: **328 passed** (0 failures, 0 skipped).
 - **Execution Time**: ~50 seconds for the entire test suite on standard development hardware.
 - **External Dependency Requirement**: **Zero**. All tests run completely offline without external network connectivity, live API keys, paid credits, or container daemons.
 - **Code Coverage Note**: While tests exercise all core functional modules, code coverage percentages are not published to prevent claiming unmeasured metrics.
@@ -22,6 +22,7 @@ tests/
 ├── test_agent.py                         # Single ToolCallingAgent execution & prompt flow
 ├── test_agent_api.py                     # Agent REST endpoint contract tests
 ├── test_agent_multiprovider.py           # Provider selection & fallback validation
+├── test_benchmarks.py                    # Benchmark runner, report schema, and invariant validation
 ├── test_calculator.py                    # AST calculator parser, limits, and security tests
 ├── test_deployment_reliability.py        # End-to-end deployment verification script harness
 ├── test_e2e_integration.py               # Complete cross-subsystem orchestration tests
@@ -80,7 +81,7 @@ tests/
 
 ## 3. Running the Test Suite
 
-### Run All 320 Tests
+### Run All 328 Tests
 ```bash
 pytest
 ```
