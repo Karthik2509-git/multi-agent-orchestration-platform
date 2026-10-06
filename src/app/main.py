@@ -36,7 +36,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_telemetry(settings)
 
     # Initialize checkpointer pool if configured
-    await init_checkpointer(settings)
+    try:
+        await init_checkpointer(settings)
+    except Exception as e:
+        logger.warning("Checkpointer initialization deferred or failed: %s", e)
 
     # Initialize MCP subsystem if enabled
     mcp_service = get_mcp_service(settings)

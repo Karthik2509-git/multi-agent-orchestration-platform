@@ -20,6 +20,9 @@ async def init_checkpointer(
 ) -> BaseCheckpointSaver:
     """Initialize checkpointer and connection pool at application startup."""
     global _global_checkpointer, _global_pool
+    if _global_checkpointer is not None:
+        return _global_checkpointer
+
     app_settings = settings or get_settings()
 
     if app_settings.checkpoint_backend == "memory":
@@ -108,3 +111,38 @@ def reset_checkpointer() -> None:
     global _global_checkpointer, _global_pool
     _global_checkpointer = None
     _global_pool = None
+
+
+def get_connection_pool() -> Optional[Any]:
+    """Return current active connection pool if initialized."""
+    return _global_pool
+
+
+def set_connection_pool(
+    pool: Optional[Any],
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+) -> None:
+    """Set global connection pool and optional checkpointer (primarily for testing/injection)."""
+    global _global_pool, _global_checkpointer
+    _global_pool = pool
+    if checkpointer is not None:
+        _global_checkpointer = checkpointer
+
+
+async def check_postgres_readiness(timeout_seconds: float = 2.0) -> bool:
+    """Perform a lightweight PostgreSQL connectivity check using the existing pool."""
+    global _global_pool
+    if _global_pool is None:
+        return False
+    try:
+        import asyncio
+
+        async def _ping() -> bool:
+            async with _global_pool.connection(timeout=timeout_seconds) as conn:
+                await conn.execute("SELECT 1;")
+                return True
+
+        return await asyncio.wait_for(_ping(), timeout=timeout_seconds)
+    except Exception as e:
+        logger.warning("PostgreSQL readiness check failed: %s", e)
+        return False

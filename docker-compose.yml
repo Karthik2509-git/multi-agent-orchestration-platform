@@ -8,25 +8,36 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=development
-      - DEBUG=true
+      - APP_ENV=${APP_ENV:-development}
+      - DEBUG=${DEBUG:-false}
       - HOST=0.0.0.0
       - PORT=8000
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
       - POSTGRES_SERVER=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=orchestrator_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres_dev_password
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres_dev_password@postgres:5432/orchestrator_db
+      - POSTGRES_DB=${POSTGRES_DB:-orchestrator_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_dev_password}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_dev_password}@postgres:5432/${POSTGRES_DB:-orchestrator_db}
+      - CHECKPOINT_BACKEND=postgres
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_URL=redis://redis:6379/0
+      - RAG_PERSIST_DIRECTORY=/app/data/chroma
+      - MEMORY_PERSIST_DIRECTORY=/app/data/chroma_memory
+    volumes:
+      - chroma_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - orchestrator_net
 
@@ -35,15 +46,16 @@ services:
     container_name: orchestrator_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: orchestrator_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-orchestrator_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+    # Bound strictly to loopback interface to prevent public exposure
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d orchestrator_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-orchestrator_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,8 +66,9 @@ services:
     image: redis:7-alpine
     container_name: orchestrator_redis
     restart: unless-stopped
+    # Bound strictly to loopback interface to prevent public exposure
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -69,6 +82,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  chroma_data:
 
 networks:
   orchestrator_net:

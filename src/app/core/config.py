@@ -210,10 +210,29 @@ class Settings(BaseSettings):
         return normalized
 
     @model_validator(mode="after")
-    def enforce_production_telemetry_safety(self) -> "Settings":
-        """Strictly force telemetry_record_payloads to False in production environments."""
-        if self.app_env.lower() == "production" and self.telemetry_record_payloads:
-            self.telemetry_record_payloads = False
+    def validate_production_security(self) -> "Settings":
+        """Enforce strict security boundaries and password safety in production environments."""
+        env = self.app_env.strip().lower()
+        if env == "production":
+            # Force telemetry payload recording off to prevent data leakage
+            if self.telemetry_record_payloads:
+                self.telemetry_record_payloads = False
+
+            # Disallow insecure default or placeholder passwords in production
+            insecure_defaults = {
+                "changeme_in_production",
+                "postgres_dev_password",
+                "password",
+                "",
+            }
+            if (
+                self.checkpoint_backend == "postgres"
+                and self.postgres_password.strip().lower() in insecure_defaults
+            ):
+                raise ValueError(
+                    "Insecure default POSTGRES_PASSWORD detected in production environment. "
+                    "A secure, non-default password must be configured."
+                )
         return self
 
 

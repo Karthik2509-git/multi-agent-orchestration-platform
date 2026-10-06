@@ -1,0 +1,41 @@
+# ==============================================================================
+# Multi-Agent Orchestration Platform - Docker Build Ignore
+# Exclude local build artifacts, virtual environments, caches, and secrets
+# ==============================================================================
+
+# Version control
+.git
+.gitignore
+
+# Virtual environment & Python dependencies
+.venv/
+venv/
+env/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing, linting & code quality caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Development scratch scripts & local data
+scratch/
+.gemini/
+.idea/
+.vscode/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
