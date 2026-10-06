@@ -1,696 +1,313 @@
 # Multi-Agent AI Orchestration Platform
 
-A production-grade, modular Multi-Agent AI Orchestration Platform designed to coordinate specialized AI agents, tool ecosystems, memory, and retrieval workflows using industry-standard engineering patterns.
+A production-grade, modular backend system engineered to coordinate specialized autonomous agents, standardized tool ecosystems, hybrid retrieval (RAG), persistent memory, human oversight, and execution replay.
 
 ---
 
-## 🌟 Project Vision
+## 🏛️ System Overview
 
-The vision of this platform is to provide an enterprise-ready blueprint and runtime for multi-agent systems. It demonstrates how autonomous agents, supervised routing, external tool integrations, and human oversight can be orchestrated reliably at scale with rigorous observability, evaluation, and security guardrails.
+The **Multi-Agent AI Orchestration Platform** provides an enterprise-ready reference architecture for complex, multi-agent AI systems. Rather than relying on simple linear prompt chains or unconstrained autonomous loops, the platform employs **LangGraph StateGraph** to enforce directed state machines, cycle limits, and durable checkpointing.
 
-### What the Platform Will Eventually Demonstrate
-- **LLM Integration**: Unified multi-provider abstractions (OpenRouter, Google Gemini, Groq, local models).
-- **Multi-Agent Architecture**: Hierarchical supervisor and specialist agents cooperating on complex objectives.
-- **LangGraph Orchestration**: State-machine-driven agent control loops, branching, cycles, and deterministic graph flows.
-- **Supervisor & Specialist Agents**: Domain-focused workers (research, code generation, analysis, verification).
-- **Model Context Protocol (MCP)**: Native MCP client integration for standardized external tooling and context servers.
-- **Tool / Function Calling**: Typed schema generation, dynamic tool registry, input validation, and execution guards.
-- **REST API Integration**: FastAPI endpoints exposing asynchronous agent runs, job status polling, and streaming responses.
-- **RAG (Retrieval-Augmented Generation)**: Ingestion pipelines, hybrid vector search, chunking strategies, and re-ranking.
-- **Vector Databases**: Scalable document indexing and similarity search.
-- **Short-Term & Long-Term Memory**: Conversation checkpointing, episodic storage, and semantic user memory retrieval.
-- **Human-in-the-Loop Workflows**: Interrupt hooks, approval gates, and state editing for sensitive actions.
-- **Confidence-Based Routing**: Dynamic routing based on agent self-evaluation and uncertainty heuristics.
-- **Retries & Error Handling**: Exponential backoff, fallback models, and graceful degradation.
-- **Async / Background Task Execution**: Decoupled task queue processing for long-running workflows.
-- **Observability & Tracing**: Distributed tracing with OpenTelemetry, span tracking for LLM calls, and metrics dashboards.
-- **Evaluation**: Agent benchmark suites, output quality metrics, and automated regression testing.
-- **Guardrails & Security**: Prompt injection sanitization, PII filtering, SSRF/DNS-rebinding protection, and policy enforcement.
-- **Infrastructure**: FastAPI, PostgreSQL, Redis, Docker, Automated Testing, and CI/CD pipelines.
+Specialized agents (Research, Data, Code, and Final Synthesis) operate under the dynamic supervision of a Supervisor agent, executing tools through a hardened execution registry equipped with call budgets, run-scoped tool failure isolation, and SSRF defenses.
+
+```mermaid
+graph TD
+    Client["Client / External Consumer"] -->|HTTP / JSON| API["FastAPI REST API Layer<br/>(21 Paths / 24 Operations)"]
+
+    subgraph Core Services
+        API --> HealthService["HealthService<br/>(Liveness & Self-Healing Readiness)"]
+        API --> AgentService["AgentService<br/>(Single Agent + Tool Registry)"]
+        API --> OrchestrationService["OrchestrationService<br/>(LangGraph Coordinator)"]
+        API --> RAGService["RAGService<br/>(Hybrid Ingestion & Search)"]
+        API --> MemoryService["MemoryService<br/>(Chroma Semantic Store)"]
+        API --> MCPService["MCPService<br/>(Server & Client Adapter)"]
+        API --> ReplayService["ReplayService<br/>(Thread Fork & State Override)"]
+    end
+
+    subgraph LangGraph Orchestration Engine
+        OrchestrationService --> Supervisor["Supervisor Agent<br/>(Intent Classification & Plan)"]
+        Supervisor -->|Route| ResearchAgent["Research Agent<br/>(Web & Doc Search)"]
+        Supervisor -->|Route| DataAgent["Data Agent<br/>(Arithmetic & Stats)"]
+        Supervisor -->|Route| CodeAgent["Code Agent<br/>(Static Code Synthesis)"]
+        Supervisor -->|Synthesize| FinalAgent["Final Agent<br/>(Answer Aggregation)"]
+
+        Supervisor -.->|Sensitive / Low Confidence| ApprovalGate["ApprovalGate Node<br/>(LangGraph interrupt)"]
+    end
+
+    subgraph Tool & Extension Ecosystem
+        ResearchAgent --> ToolRegistry["Tool Registry<br/>(Guarded Execution)"]
+        DataAgent --> ToolRegistry
+
+        ToolRegistry --> NativeTools["Native Tools<br/>• Calculator (AST)<br/>• HTTP GET (SSRF-Hardened)"]
+        ToolRegistry --> RAGTool["Knowledge Search Tool<br/>(Hybrid RAG)"]
+        ToolRegistry --> MCPAdapter["MCP Tool Adapter<br/>(Local MCP Tools)"]
+    end
+
+    subgraph State, Memory & Persistence
+        ApprovalGate -.-> Checkpointer["LangGraph Checkpointer<br/>(AsyncPostgresSaver / MemorySaver)"]
+        OrchestrationService --> Checkpointer
+        OrchestrationService --> LongTermMemory["Long-Term Semantic Memory<br/>(Chroma: agent_memory)"]
+        RAGService --> VectorStore["Vector Store<br/>(Chroma: knowledge_base)"]
+    end
+
+    subgraph Observability & Guardrails
+        API -.-> OTel["OpenTelemetry Tracing<br/>(Spans & Context Propagation)"]
+        ToolRegistry -.-> Guardrails["Tool Guardrails<br/>(Budget: 10 calls, Failures: 3, Payload limits)"]
+        OrchestrationService -.-> CostTracker["Cost Tracker<br/>(Per-Model Token Accounting)"]
+    end
+```
 
 ---
 
-## 🏛️ High-Level Architecture
+## ⚡ Core Capabilities
 
-The platform follows clean architecture principles with strict separation of concerns, dependency injection, and modular encapsulation:
+- **State-Machine Orchestration**: Directed multi-agent collaboration with explicit loop limits (`MAX_ITERATIONS = 10`) and dynamic replanning via LangGraph.
+- **Provider-Agnostic LLM Layer**: Unified interface supporting OpenRouter, Google Gemini, Groq, local models, and a deterministic offline Mock provider.
+- **Model Context Protocol (MCP)**: Native integration with Anthropic's MCP specification, allowing dynamic tool discovery and execution via local or external MCP servers.
+- **Hybrid Retrieval-Augmented Generation (RAG)**: Multi-format parsing (`.txt`, `.md`, `.pdf`), local ONNX dense embeddings (`all-MiniLM-L6-v2`), BM25 lexical search, and Reciprocal Rank Fusion (RRF $\alpha=0.6$).
+- **Dual-Tier Memory**:
+  - *Working Memory*: Thread execution history and scratchpads persisted to PostgreSQL via LangGraph's `AsyncPostgresSaver` (or in-memory `MemorySaver`).
+  - *Long-Term Semantic Memory*: Persistent knowledge stored in Chroma (`agent_memory`), featuring entity extraction, cosine deduplication ($>0.85$), TTL sweeps, and composite ranking ($0.65\text{sim} + 0.25\text{imp} + 0.10\text{recency}$).
+- **Human-in-the-Loop (HITL)**: Native LangGraph `interrupt()` gates triggered by sensitive actions or low supervisor confidence ($<0.65$), supporting asynchronous thread inspection and resumption.
+- **Execution Replay & Time-Travel Debugging**: Historical checkpoint restoration, thread branching (`fork=True`), and mock tool injection for regression analysis.
+- **Defense-in-Depth Security**: SSRF & DNS-rebinding protection on HTTP requests, AST-based arithmetic parsing without `eval()`, non-executing CodeAgent persona, payload size limits, and consecutive-failure tool disablement.
+- **Distributed Observability**: OpenTelemetry spans across endpoints, graph steps, agent reasoning, and tool calls, complemented by token cost calculation and latency metrics.
+- **Self-Healing Infrastructure**: Asynchronous connection pool re-initialization ensuring zero-downtime recovery when downstream databases start up out-of-order.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Language & Runtime** | Python 3.12 (compatible with 3.11+) | Core platform programming language |
+| **Web Framework** | FastAPI 0.110+, Uvicorn | High-performance ASGI REST API |
+| **Orchestration** | LangGraph, LangChain Core | Cyclical state graphs, supervisor routing, checkpointing |
+| **Data Validation** | Pydantic v2, Pydantic Settings | Typed request/response models and environment validation |
+| **Tool Protocol** | Model Context Protocol (MCP) SDK v2 | Standardized tool discovery and execution |
+| **Vector Database** | Chroma DB | Persistent embedding storage for RAG and semantic memory |
+| **Embeddings** | ONNX Runtime (`all-MiniLM-L6-v2`) | Local, offline, zero-cost semantic embedding generation |
+| **Relational Storage** | PostgreSQL 16 (`asyncpg`, `psycopg-pool`) | Persistent LangGraph working memory checkpointing |
+| **Caching / Queues** | Redis 7 (configured, non-runtime-critical) | Auxiliary infrastructure cache |
+| **Observability** | OpenTelemetry Python SDK | Distributed tracing, context propagation, span hierarchy |
+| **Testing & Quality** | Pytest, Pytest-Asyncio, AnyIO, Ruff | 320 automated tests, static analysis, code formatting |
+| **Containerization** | Docker, Docker Compose | Production non-root container and coordinated service stack |
+
+---
+
+## 📂 Repository Structure
 
 ```
 multi-agent-orchestration-platform/
-├── .env.example                 # Canonical environment configuration template
-├── .gitignore                   # Production ignore patterns (secrets, virtualenvs, cache)
-├── Dockerfile                   # Production-grade Python 3.12-slim container
-├── docker-compose.yml           # Backend, PostgreSQL, and Redis infrastructure
-├── pyproject.toml               # Modern Python packaging and tool configuration
-├── requirements.txt             # Pinned production dependencies
-├── requirements-dev.txt         # Development, testing, and linting dependencies
-├── README.md                    # Platform documentation and roadmap
+├── .dockerignore                 # Container build exclusions (.git, .venv, caches)
+├── .env.example                  # Complete environment variable template
+├── Dockerfile                    # Secure Python 3.12-slim image (non-root appuser)
+├── docker-compose.yml            # Coordinated backend, PostgreSQL, and Redis stack
+├── pyproject.toml                # Project packaging and Ruff configuration
+├── requirements.txt              # Pinned production dependencies
+├── requirements-dev.txt          # Development, testing, and linting dependencies
+├── README.md                     # Project overview and documentation index
+├── docs/                         # Comprehensive engineering documentation
+│   ├── README.md                 # Documentation navigation index
+│   ├── architecture/             # System overview, runtime flow, component map, diagrams
+│   ├── api/                      # Authoritative REST API specification (21 paths / 24 ops)
+│   ├── development/              # Setup, configuration inventory, testing strategy
+│   ├── operations/               # Deployment, health/readiness, troubleshooting
+│   ├── security/                 # Threat model, SSRF protection, guardrails, non-goals
+│   └── decisions/                # Architectural Decision Records (ADRs 001–005)
+├── scripts/
+│   └── verify_deployment.py      # Standalone deployment verification and smoke test script
 ├── src/
 │   └── app/
-│       ├── __init__.py          # Package initialization (__version__ = "0.1.0")
-│       ├── main.py              # Application factory, lifespan, CORS, and root routes
-│       ├── core/                # Typed configuration & centralized logging
-│       │   ├── config.py        # Pydantic Settings management
-│       │   └── logging.py       # Structured logging setup
-│       ├── api/                 # REST API layer with versioning
-│       │   └── v1/
-│       │       ├── api.py       # Aggregation router for v1
-│       │       └── endpoints/
-│       │           ├── health.py        # Health check endpoint (/api/v1/health)
-│       │           ├── agent.py         # Agent run endpoint (/api/v1/agent/run)
-│       │           ├── llm.py           # Provider status endpoint (/api/v1/llm/providers)
-│       │           └── orchestration.py # Multi-agent orchestration (/api/v1/orchestration/run)
-│       ├── models/              # Pydantic schemas and domain entities
-│       │   └── schemas/
-│       │       ├── health.py        # Health check data contracts
-│       │       ├── agent.py         # Single agent request and response contracts
-│       │       ├── llm.py           # LLM provider response and tool call contracts
-│       │       ├── provider.py      # Provider configuration status schema
-│       │       ├── orchestration.py # Multi-agent orchestration run contracts
-│       │       ├── memory.py        # Long-term semantic memory schemas
-│       │       └── hitl.py          # HITL approval request & response schemas
-│       ├── services/            # Reusable business logic services
-│       │   ├── health.py                # Shared health status generator
-│       │   ├── agent_service.py         # Agent task execution and tool registry factory
-│       │   └── orchestration_service.py # LangGraph workflow coordinator with Memory & HITL
-│       ├── agents/              # Agent layer
-│       │   ├── base.py               # BaseSpecializedAgent and AgentResult
-│       │   ├── supervisor.py         # SupervisorAgent with strict allowlist routing & memory context
-│       │   ├── research_agent.py     # ResearchAgent with safe URL retrieval
-│       │   ├── data_agent.py         # DataAgent with CalculatorTool integration
-│       │   ├── code_agent.py         # CodeAgent with zero-execution guarantee
-│       │   ├── final_agent.py        # FinalAgent aggregator and synthesizer
-│       │   └── tool_calling_agent.py # Single AI agent with tool loop
-│       ├── tools/               # Agent tool implementations & registry
-│       │   ├── base.py          # BaseTool and ToolResult abstractions
-│       │   ├── registry.py      # Tool discovery and execution registry
-│       │   ├── calculator.py    # Safe AST-based arithmetic calculator
-│       │   ├── http_tool.py     # Safe HTTP GET with SSRF and DNS-rebinding protection
-│       │   └── knowledge_search.py # RAG KnowledgeSearchTool
-│       ├── llm/                 # Unified LLM provider adapters
-│       │   ├── base.py          # LLMProvider abstract interface
-│       │   ├── factory.py       # LLM provider dependency injection factory
-│       │   └── providers/
-│       │       ├── openrouter.py # OpenRouter provider (OpenAI-compatible async client)
-│       │       ├── gemini.py     # Google Gemini provider (official google-genai SDK)
-│       │       ├── groq.py       # Groq provider (ultra-fast LPU inference)
-│       │       ├── mock.py       # MockLLMProvider for offline deterministic tests
-│       │       └── openai.py     # Optional legacy OpenAI provider
-│       ├── orchestration/       # LangGraph multi-agent workflows
-│       │   ├── state.py         # Shared typed state (OrchestrationState)
-│       │   └── graph.py         # StateGraph with Memory retrieval & ApprovalGate
-│       ├── mcp/                 # Model Context Protocol (MCP) subsystem
-│       │   ├── models.py        # Normalized MCP tool definition & server status contracts
-│       │   ├── client.py        # MCPClient wrapper delegating to official v2 Client
-│       │   ├── adapters.py      # MCPToolAdapter making MCP tools compatible with BaseTool
-│       │   ├── registry.py      # MCPToolRegistry managing discovery, allowlisting, and injection
-│       │   └── servers/         # In-process MCPServers
-│       │       └── local_tools.py # Local MCPServer with safe AST calculator & text_stats
-│       ├── rag/                 # RAG and Knowledge subsystem (Phase 5)
-│       │   ├── models.py        # Document, DocumentChunk, RetrievalResult, Citation schemas
-│       │   ├── chunking.py      # RecursiveChunker with customizable separators and overlap
-│       │   ├── embeddings.py    # LocalEmbeddingProvider (ONNX all-MiniLM-L6-v2), Mock, OpenAI
-│       │   ├── ingestion.py     # DocumentLoader (.txt, .md, page-aware .pdf via pypdf)
-│       │   ├── vector_store.py  # VectorStore abstract interface
-│       │   ├── chroma_store.py  # ChromaVectorStore (PersistentClient default & EphemeralClient)
-│       │   ├── hybrid_retriever.py # BM25 lexical ranking + dense semantic search + RRF fusion
-│       │   └── service.py       # RAGService coordinating ingestion, retrieval, and synthesis
-│       ├── memory/              # Memory & Persistence subsystem (Phase 6)
-│       │   ├── models.py        # MemoryRecord, MemorySearchResult, MemoryType, MemoryStats
-│       │   ├── interfaces.py    # MemoryStore abstract base class
-│       │   ├── stores/          # ChromaMemoryStore with strict scope isolation
-│       │   ├── retrieval.py     # MemoryRetriever with composite score ranking
-│       │   ├── extraction.py    # MemoryExtractor (deterministic & LLM extraction)
-│       │   ├── consolidation.py # MemoryConsolidator for duplicate merging & TTL cleanup
-│       │   ├── working_memory.py # LangGraph checkpointer factory (AsyncPostgresSaver / MemorySaver)
-│       │   └── service.py       # MemoryService unified coordinator
-│       ├── hitl/                # Human-in-the-Loop subsystem (Phase 6)
-│       │   ├── models.py        # HITLRequest, HITLResponse, ApprovalDecision, ApprovalLevel
-│       │   ├── policies.py      # EscalationPolicy for deterministic & confidence triggers
-│       │   └── service.py       # HITLService for pending inspection & Command(resume=...)
-│       ├── observability/       # Tracing, metrics, and monitoring (Phase 7+)
-│       └── evaluation/          # Benchmark harnesses and eval suites (Phase 7+)
-└── tests/                       # Pytest test suite (158 automated tests)
-    ├── conftest.py                    # Test client fixtures and environment overrides
-    ├── test_health.py                 # Health endpoint integration tests
-    ├── test_calculator.py             # Calculator tool safety and arithmetic tests
-    ├── test_http_tool.py              # HTTP tool SSRF, DNS-rebinding, and size tests
-    ├── test_tool_registry.py          # ToolRegistry registration and execution tests
-    ├── test_agent.py                  # ToolCallingAgent loop and error recovery tests
-    ├── test_agent_api.py              # POST /api/v1/agent/run API endpoint tests
-    ├── test_openrouter_provider.py    # OpenRouter provider normalization & error tests
-    ├── test_groq_provider.py          # Groq provider normalization & error tests
-    ├── test_gemini_provider.py        # Gemini SDK normalization & tool mapping tests
-    ├── test_llm_factory_and_status.py # Factory selection and provider status tests
-    ├── test_agent_multiprovider.py    # Cross-provider agent tool execution tests
-    ├── test_orchestration_state.py    # LangGraph state management tests
-    ├── test_orchestration_graph.py    # LangGraph workflow execution & routing tests
-    ├── test_specialized_agents.py     # Specialist agents & prompt verification
-    ├── test_supervisor.py             # Supervisor routing & recovery tests
-    ├── test_orchestration_api.py      # POST /api/v1/orchestration/run endpoint tests
-    ├── test_mcp_models.py             # MCP schema serialization and error tests
-    ├── test_mcp_server.py             # MCPServer tool registration & execution tests
-    ├── test_mcp_client.py             # MCPClient initialization & lifespan tests
-    ├── test_mcp_adapter.py            # MCPToolAdapter BaseTool compatibility tests
-    ├── test_mcp_registry.py           # MCPToolRegistry allowlisting & injection tests
-    ├── test_mcp_service.py            # MCPService lifecycle & health aggregation tests
-    ├── test_mcp_api.py                # REST API endpoints for MCP servers & tools
-    ├── test_mcp_tool_integration.py   # Agent execution of MCP tools via ToolRegistry
-    ├── test_rag_models.py             # Document and chunk schema validation tests
-    ├── test_rag_chunking.py           # Recursive chunker and separator hierarchy tests
-    ├── test_rag_embeddings.py         # Embedding provider tests (Local ONNX & Mock)
-    ├── test_rag_ingestion.py          # Document loader tests (Text, Markdown, PDF)
-    ├── test_rag_vector_store.py       # ChromaVectorStore persistent & ephemeral tests
-    ├── test_rag_hybrid_retriever.py   # BM25 + dense hybrid search & RRF ranking tests
-    ├── test_rag_service.py            # RAGService ingestion, search & query tests
-    ├── test_rag_tool_agent_integration.py # Agent KnowledgeSearchTool execution tests
-    ├── test_memory_models.py          # MemoryRecord and search result models
-    ├── test_memory_store.py           # ChromaMemoryStore CRUD and scope isolation
-    ├── test_memory_retrieval.py       # Composite ranking and prompt formatting
-    ├── test_memory_extraction.py      # Deterministic and LLM memory extraction
-    ├── test_memory_consolidation.py   # Duplicate merging and TTL expiration
-    ├── test_working_memory.py         # Thread checkpointing and recovery tests
-    ├── test_hitl_policies.py          # EscalationPolicy trigger evaluation tests
-    ├── test_hitl_workflow.py          # LangGraph interrupt and Command resume workflow
-    ├── test_memory_api.py             # REST API for long-term memory management
-    ├── test_hitl_api.py               # REST API for HITL pending and resume flow
-    └── test_orchestration_phase6_integration.py # End-to-end multi-agent Memory & HITL test
-    ├── test_rag_embeddings.py         # Local, Mock, and OpenAI embedding provider tests
-    ├── test_rag_ingestion.py          # Text, markdown, and PDF page-aware loader tests
-    ├── test_rag_vector_store.py       # ChromaVectorStore indexing & similarity tests
-    ├── test_rag_hybrid_retriever.py   # BM25 + dense search + RRF fusion tests
-    ├── test_rag_service.py            # RAGService ingestion, retrieval, and QA tests
-    ├── test_knowledge_search_tool.py  # KnowledgeSearchTool schema and execution tests
-    ├── test_knowledge_api.py          # REST API endpoints for /api/v1/knowledge/*
-    └── test_rag_tool_agent_integration.py # Agent knowledge search execution tests
+│       ├── main.py               # FastAPI application factory, lifespan, CORS, root routes
+│       ├── api/                  # REST API routers and route controllers
+│       ├── agents/               # Supervisor and specialist agent personas (Research, Data, Code, Final)
+│       ├── orchestration/        # LangGraph StateGraph, typed state, node routing
+│       ├── llm/                  # Multi-provider LLM abstraction (OpenRouter, Gemini, Groq, Mock)
+│       ├── tools/                # Native tools (Calculator, SafeHTTP, RAG) and guarded registry
+│       ├── mcp/                  # MCP Client, reference Server, and Tool Adapter
+│       ├── rag/                  # Document parsing, recursive chunking, BM25 + ONNX hybrid retrieval
+│       ├── memory/               # PostgreSQL working memory checkpointer and Chroma semantic store
+│       ├── hitl/                 # Action approval policies, gating nodes, and resume handlers
+│       ├── observability/        # OpenTelemetry tracing, system metrics, token pricing calculator
+│       ├── evaluation/           # Offline evaluation framework and benchmark dataset runner
+│       ├── replay/               # Checkpoint restoration, thread fork, and state override engine
+│       ├── services/             # Cross-cutting business logic services
+│       ├── core/                 # Typed configuration and structured logging
+│       └── models/               # Domain Pydantic schemas and data contracts
+└── tests/                        # 320 automated unit, integration, and E2E tests
 ```
 
 ---
 
-## 🚀 Current Implementation Status
+## 🔌 API Surface Summary
 
-| Component | Status | Details |
-| :--- | :--- | :--- |
-| **Foundation & Architecture** | ✅ Completed (Phase 1) | Modular directory structure, package hierarchy, and typing baseline |
-| **FastAPI Core & Health** | ✅ Completed (Phase 1) | Application factory, lifespan events, CORS middleware, `/health` and `/api/v1/health` |
-| **Configuration** | ✅ Completed (Phase 1) | Pydantic Settings (`BaseSettings`), environment variable validation, `.env.example` |
-| **Containerization** | ✅ Completed (Phase 1) | Multi-stage Dockerfile (Python 3.12-slim, non-root user), Docker Compose with Postgres and Redis |
-| **Tool Registry & Safety** | ✅ Completed (Phase 2) | `ToolRegistry`, AST-based `calculator`, and SSRF/DNS-rebinding hardened `http_get` tool |
-| **Single AI Agent** | ✅ Completed (Phase 2) | `ToolCallingAgent` with decision loop, validation, error recovery, and iteration ceiling |
-| **Agent API** | ✅ Completed (Phase 2) | `POST /api/v1/agent/run` with structured responses, tool audit trails, and execution timing |
-| **Multi-Provider LLM Infrastructure** | ✅ Completed (Phase 2.5) | Provider-agnostic architecture: OpenRouter, Google Gemini, Groq, Mock, and OpenAI |
-| **Provider Status Endpoint** | ✅ Completed (Phase 2.5) | `GET /api/v1/llm/providers` exposing active provider and configuration readiness |
-| **Multi-Agent Orchestration (LangGraph)** | ✅ Completed (Phase 3) | StateGraph workflow, SupervisorAgent, specialized workers, loop ceiling, and orchestration API |
-| **MCP Tool Ecosystem** | ✅ Completed (Phase 4) | Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing & REST APIs |
-| **RAG & Knowledge System** | ✅ Completed (Phase 5) | Page-aware loaders, RecursiveChunker, Local ONNX embeddings, Chroma PersistentClient, BM25 + Dense RRF |
-| **Test Suite** | ✅ Completed (Phase 5) | 133 unit and integration tests (zero paid API keys required for testing) |
-| **Memory & HITL** | ⏳ Pending (Phase 6) | Deferred to Phase 6 |
+The application exposes **21 unique URI paths** representing **24 HTTP operations**:
 
----
+| Domain | Method | Endpoint Path | Description |
+|---|---|---|---|
+| **Health** | `GET` | `/health` | Lightweight process liveness probe |
+| **Health** | `GET` | `/api/v1/health` | Comprehensive readiness probe with self-healing checks |
+| **Agent** | `POST` | `/api/v1/agent/run` | Execute single tool-calling agent |
+| **Orchestration** | `POST` | `/api/v1/orchestration/run` | Execute multi-agent LangGraph workflow |
+| **Orchestration** | `POST` | `/api/v1/orchestration/replay` | Time-travel replay or fork from checkpoint |
+| **HITL** | `GET` | `/api/v1/hitl/pending/{thread_id}` | Inspect paused thread requiring approval |
+| **HITL** | `POST` | `/api/v1/hitl/resume/{thread_id}` | Submit human approval decision to resume |
+| **Knowledge** | `POST` | `/api/v1/knowledge/documents` | Ingest raw text document into knowledge base |
+| **Knowledge** | `GET` | `/api/v1/knowledge/documents` | List indexed documents |
+| **Knowledge** | `POST` | `/api/v1/knowledge/documents/upload` | Multipart file upload (`.txt`, `.md`, `.pdf`) |
+| **Knowledge** | `DELETE` | `/api/v1/knowledge/documents/{id}` | Delete document and vector chunks |
+| **Knowledge** | `POST` | `/api/v1/knowledge/search` | Execute hybrid search (dense + BM25 + RRF) |
+| **Knowledge** | `POST` | `/api/v1/knowledge/query` | RAG query returning synthesized answer |
+| **Knowledge** | `GET` | `/api/v1/knowledge/stats` | Retrieve vector store statistics |
+| **Memory** | `POST` | `/api/v1/memory` | Create new semantic long-term memory |
+| **Memory** | `GET` | `/api/v1/memory` | List semantic memories by scope |
+| **Memory** | `GET` | `/api/v1/memory/{id}` | Get memory item by ID |
+| **Memory** | `DELETE` | `/api/v1/memory/{id}` | Delete memory item by ID |
+| **Memory** | `POST` | `/api/v1/memory/search` | Semantic search with composite ranking |
+| **Memory** | `POST` | `/api/v1/memory/consolidate` | Deduplicate vectors and purge expired TTL items |
+| **Memory** | `GET` | `/api/v1/memory/stats` | Retrieve memory item metrics per scope |
+| **MCP** | `GET` | `/api/v1/mcp/health` | Check status of local MCP server |
+| **MCP** | `GET` | `/api/v1/mcp/tools` | List registered MCP tools and schemas |
+| **LLM** | `GET` | `/api/v1/llm/providers` | Query active LLM provider and available models |
 
-## 🔌 Phase 2.5: Multi-Provider LLM Infrastructure
-
-Phase 2.5 establishes a provider-agnostic infrastructure. The `ToolCallingAgent` has zero provider-specific logic and communicates exclusively through the abstract `LLMProvider` interface.
-
-```
-                    ToolCallingAgent
-                           │
-                      LLMProvider
-                           │
-          ┌────────────────┼────────────────┬────────────────┐
-          ▼                ▼                ▼                ▼
-     OpenRouter          Gemini            Groq             Mock
-  (openrouter/free) (gemini-2.5-flash) (llama-3.3-70b)   (Offline Tests)
-```
-
-### Supported Providers
-
-1. **OpenRouter (`openrouter`)** — *Default*:
-   - Uses OpenAI-compatible async client with base URL `https://openrouter.ai/api/v1`.
-   - Includes OpenRouter recommended headers (`HTTP-Referer`, `X-Title`).
-   - Configurable model via `OPENROUTER_MODEL` (e.g. `openrouter/free` or `meta-llama/llama-3.3-70b-instruct:free`).
-2. **Google Gemini (`gemini`)**:
-   - Uses the official `google-genai` SDK (`genai.Client`).
-   - Maps user messages to Gemini `user` content, assistant text/calls to `model` content, and tool results to `function_response` content.
-   - Translates tool definitions into Gemini `FunctionDeclaration` objects.
-   - Configurable model via `GEMINI_MODEL` (e.g. `gemini-2.5-flash`).
-3. **Groq (`groq`)**:
-   - Uses OpenAI-compatible async client with base URL `https://api.groq.com/openai/v1`.
-   - Ultra-low latency LPU inference on free-tier open models.
-   - Configurable model via `GROQ_MODEL` (e.g. `llama-3.3-70b-versatile`).
-4. **Mock (`mock`)**:
-   - Requires zero API keys or network calls; used for deterministic testing of tool cycles and error states.
-5. **OpenAI (`openai`)**:
-   - Maintained as an optional legacy provider; never required for running the platform.
-
-### Zero Paid Requirement & Free-Tier Development
-The platform is designed to be fully runnable with zero paid API providers. All model identifiers are environment-variable driven:
-- `LLM_PROVIDER`: Sets the active provider (`openrouter`, `gemini`, `groq`, `mock`, `openai`).
-- `OPENROUTER_MODEL`: Model identifier on OpenRouter.
-- `GEMINI_MODEL`: Model identifier on Google Gemini.
-- `GROQ_MODEL`: Model identifier on Groq.
-
-Missing credentials on *inactive* providers will never cause import or runtime failures. If `LLM_PROVIDER=openrouter` is active, empty Gemini and Groq keys are completely ignored.
+*Detailed request and response schemas are documented in [docs/api/overview.md](docs/api/overview.md).*
 
 ---
 
-## 📡 Provider Status API Endpoint
-
-Inspect provider configuration and active status:
-```bash
-curl http://127.0.0.1:8000/api/v1/llm/providers
-```
-
-Example response (zero credentials exposed):
-```json
-{
-  "active_provider": "openrouter",
-  "providers": {
-    "openrouter": {
-      "configured": true,
-      "model": "openrouter/free"
-    },
-    "gemini": {
-      "configured": false,
-      "model": "gemini-2.5-flash"
-    },
-    "groq": {
-      "configured": false,
-      "model": "llama-3.3-70b-versatile"
-    },
-    "mock": {
-      "configured": true,
-      "model": "mock-model"
-    },
-    "openai": {
-      "configured": false,
-      "model": "gpt-4o-mini"
-    }
-  }
-}
-```
-
----
-
-## 🧠 Phase 3: Multi-Agent Orchestration with LangGraph
-
-Phase 3 transitions the platform from a single tool-calling agent to a modular, state-driven multi-agent orchestration graph built on **LangGraph**.
-
-### Graph Topology & State Machine
-
-```
-               START
-                 │
-                 ▼
-         ┌───────────────┐
-         │  Supervisor   │◄──────────────────────────┐
-         └───────┬───────┘                           │
-                 │                                   │
-      ┌──────────┼──────────┐                        │
-      ▼          ▼          ▼                        │
-┌──────────┐┌──────────┐┌──────────┐                 │
-│ Research ││   Data   ││   Code   │                 │
-│  Agent   ││  Agent   ││  Agent   │                 │
-└────┬─────┘└────┬─────┘└────┬─────┘                 │
-     │           │           │                       │
-     └───────────┴───────────┴───────────────────────┘
-                 │
-          (next_agent: final / loop limit)
-                 │
-                 ▼
-          ┌─────────────┐
-          │    Final    │
-          │ Synthesizer │
-          └──────┬──────┘
-                 │
-                 ▼
-                END
-```
-
-### Orchestration Components
-
-- **Typed Orchestration State (`OrchestrationState`)**:
-  - Encapsulates `task`, `messages`, `next_agent`, `agent_results` dict, `agents_used` list, `step_count`, `final_answer`, `status`, and non-sensitive `metadata`.
-- **Defensive Supervisor Routing (`SupervisorAgent`)**:
-  - Evaluates user objectives and accumulated specialist findings.
-  - Strict allowlist parser enforcing only valid targets: `research`, `data`, `code`, `final`.
-  - Malformed model responses, unexpected strings (e.g., `browser`), or parse errors automatically and safely default to `final`.
-- **Specialized Worker Agents**:
-  - **`ResearchAgent`**: Analyzes research tasks and optionally inspects explicitly permitted URLs using `SafeHTTPGetTool`, synthesizing findings with the active LLM. (Web search is deferred to Phase 4 MCP).
-  - **`DataAgent`**: Handles quantitative and numerical analysis, safely reusing `CalculatorTool` for arithmetic verification.
-  - **`CodeAgent`**: Specializes in code architecture, syntax review, and implementation generation. Strictly guarantees zero code execution and zero shell interaction.
-  - **`FinalAgent`**: Aggregates all specialist findings into a unified, user-facing synthesized response.
-- **Deterministic Loop Ceiling**:
-  - Enforces `MAX_ORCHESTRATION_STEPS = 8`. If the supervisor exceeds 8 routing transitions, the workflow forces termination to `final` and records `terminated_due_to_limit: True` in metadata.
-- **Provider-Agnostic Core**:
-  - All supervisor and specialist nodes depend strictly on the abstract `LLMProvider` interface.
-
----
-
-## 🔌 Phase 4: MCP Tool Ecosystem
-
-Phase 4 establishes native Model Context Protocol (MCP) support using the official MCP Python SDK v2 line (`Client` and `MCPServer`).
-
-### Architectural Integration
-MCP tools are exposed to agents seamlessly through `MCPToolAdapter`, which converts standard MCP schemas into `BaseTool` instances. The agents remain completely decoupled from MCP transport details:
-
-```text
-Agent
-  ↓
-ToolRegistry
-  ├── Native Tools (Calculator, SafeHTTP, KnowledgeSearch)
-  └── MCPToolAdapter
-        ↓
-    MCPClient
-        ↓
-    MCPServer (e.g., mcp.local.calculator, mcp.local.text_stats)
-```
-
-- **Namespacing & Collision Prevention**: Local MCP tools are prefixed with `mcp.local.*`.
-- **Strict Allowlisting**: Only explicitly allowlisted tools are registered into the agent's tool registry.
-- **REST Endpoints**:
-  - `GET /api/v1/mcp/health`: Aggregated status of all registered MCP servers.
-  - `GET /api/v1/mcp/tools`: List of discovered and active MCP tools with parameter schemas.
-
----
-
-## 📚 Phase 5: RAG & Knowledge System
-
-Phase 5 introduces a production-grade, modular Retrieval-Augmented Generation (RAG) subsystem providing knowledge ingestion, persistent vector storage, hybrid retrieval, and grounded question answering with structured source citations.
-
-### RAG Architecture
-
-```text
-Agent / User
-  ↓
-ToolRegistry (KnowledgeSearchTool) / REST API (/api/v1/knowledge/*)
-  ↓
-RAGService
-  ↓
-HybridRetriever
-  ├── Dense Semantic Search (LocalEmbeddingProvider: ONNX all-MiniLM-L6-v2)
-  └── Lexical Keyword Search (BM25Scorer)
-       ↓
-  Reciprocal Rank Fusion (RRF, k=60)
-       ↓
-  ChromaVectorStore (PersistentClient at ./data/chroma by default)
-```
-
-### Key RAG Components
-
-1. **Document Loaders & Ingestion (`DocumentLoader`)**:
-   - Ingests raw text, Markdown, and page-aware PDFs (via `pypdf`).
-   - Extracts page-level metadata (`page_number`, `source`, `filename`) for precise citation attribution.
-   - Enforces configurable file size limits (`RAG_MAX_FILE_SIZE_BYTES`, default 10MB).
-
-2. **Recursive Chunker (`RecursiveChunker`)**:
-   - Hierarchical separator splitting (`\n\n`, `\n`, `. `, ` `, empty string).
-   - Configurable chunk size (`RAG_CHUNK_SIZE`, default 800 characters) and overlap (`RAG_CHUNK_OVERLAP`, default 150 characters).
-
-3. **Embedding Providers (`EmbeddingProvider`)**:
-   - **`LocalEmbeddingProvider`** (*Default Application Runtime*): High-performance local sentence embedding using Chroma's ONNX-based `all-MiniLM-L6-v2` (384 dimensions). Requires zero external API keys or cloud dependencies.
-   - **`MockEmbeddingProvider`**: Deterministic SHA-256 unit-normalized embeddings for instant offline automated tests.
-   - **`OpenAIEmbeddingProvider`**: Optional cloud provider for `text-embedding-3-small` / `text-embedding-3-large`.
-
-4. **Persistent Vector Store (`ChromaVectorStore`)**:
-   - Runtime uses Chroma's `PersistentClient` targeting `./data/chroma` by default, guaranteeing data persistence across application restarts.
-   - Isolated `EphemeralClient` support for ephemeral test runs.
-
-5. **Hybrid Retrieval with Reciprocal Rank Fusion (`HybridRetriever` & `BM25Scorer`)**:
-   - Combines BM25 lexical term frequency scoring with dense vector cosine similarity.
-   - Fuses ranked lists using **Reciprocal Rank Fusion (RRF)** ($k=60$ default).
-   - Also supports configurable linear weighted fusion (`strategy="weighted"`).
-
-6. **Knowledge Search Tool (`KnowledgeSearchTool`)**:
-   - Registered directly into `ToolRegistry` when `RAG_ENABLED=true`.
-   - Accessible by `ToolCallingAgent` and LangGraph specialist agents.
-   - Returns structured snippets, document IDs, page numbers, and similarity scores.
-
-7. **Knowledge REST API (`/api/v1/knowledge/*`)**:
-   - `POST /api/v1/knowledge/documents`: Ingest raw text or markdown document.
-   - `POST /api/v1/knowledge/documents/upload`: Multipart file upload (.txt, .md, .pdf).
-   - `GET /api/v1/knowledge/documents`: List indexed documents and metadata.
-   - `DELETE /api/v1/knowledge/documents/{document_id}`: Delete document and all associated chunks.
-   - `POST /api/v1/knowledge/search`: Hybrid RRF / semantic / BM25 search.
-   - `POST /api/v1/knowledge/query`: Grounded RAG question answering with structured citations.
-   - `GET /api/v1/knowledge/stats`: Knowledge base statistics (total documents, chunks, embedding dimension).
-
----
-
-## 🧠 Phase 6 — Memory & Human-in-the-Loop (HITL)
-
-Phase 6 equips the orchestration platform with stateful conversational durability, cross-task long-term semantic memory, and native LangGraph human-in-the-loop review and approval workflows.
-
-### Memory & HITL Architecture
-
-```text
-User / API Call (POST /api/v1/orchestration/run)
-   ↓ (thread_id in configurable)
-Supervisor Node
-   ↓ (queries MemoryRetriever)
-ChromaMemoryStore (agent_memory in ./data/chroma_memory)
-   ↓ (composite score: 0.65*sim + 0.25*imp + 0.10*recency)
-Specialist Execution (Research / Data / Code / Final)
-   ↓
-Approval Gate Node
-   ├── Deterministic Escalation (requires_human_approval=True)
-   ├── Sensitive Action Trigger (financial, deletion, infrastructure)
-   ├── Specialist Failure Escalation (max_retries exceeded)
-   └── Calibrated Confidence Trigger (if explicit confidence <= threshold)
-        ↓ (if triggered)
-   interrupt(interrupt_payload) ──> Return status: "interrupted"
-        │
-   [Human Reviewer Inspects via GET /api/v1/hitl/pending/{thread_id}]
-        │
-   [Human Submits Decision via POST /api/v1/hitl/resume/{thread_id}]
-        ↓ (Command(resume=...))
-   Decision Evaluator (APPROVE / REJECT / MODIFY / TAKE_OVER)
-        ↓
-   Working Memory Checkpointer (PostgreSQL AsyncPostgresSaver / MemorySaver)
-```
-
-### Key Memory & HITL Components
-
-1. **Persistent Working Memory (`working_memory.py`)**:
-   - Production runtime uses PostgreSQL-backed `AsyncPostgresSaver` via `AsyncConnectionPool`.
-   - `MemorySaver` / `InMemorySaver` is strictly reserved for automated unit/integration tests.
-   - `thread_id` is maintained exclusively in LangGraph execution configuration (`{"configurable": {"thread_id": "..."}}`), preventing state pollution.
-
-2. **Long-Term Semantic Memory (`ChromaMemoryStore`)**:
-   - Stored in a separate Chroma collection (`agent_memory` in `./data/chroma_memory`), completely isolated from the RAG knowledge base.
-   - Strict scope isolation (`scope_id`) ensures memories belonging to one user or tenant cannot be retrieved or leaked into other scopes.
-   - Categorized by `MemoryType` (`user_preference`, `task_lesson`, `successful_strategy`, `domain_fact`).
-
-3. **Composite Scoring & Memory-Guided Planning (`MemoryRetriever`)**:
-   - Ranks retrieved memories using the formula:
-     $$\text{Score} = 0.65 \times \text{Similarity} + 0.25 \times \text{Importance} + 0.10 \times \text{Recency}$$
-   - Automatically formats relevant memories into concise contextual prompts injected before supervisor routing decisions.
-
-4. **Memory Extraction & Safe Consolidation (`MemoryExtractor` & `MemoryConsolidator`)**:
-   - Selective extraction pipeline with both deterministic rule extraction and LLM-assisted structured extraction.
-   - Non-destructive consolidation merges semantic duplicates by taking maximum importance, summing access counts, unioning task provenance, and combining metadata.
-
-5. **Native LangGraph HITL Escalation (`approval_gate_node`)**:
-   - Triggers native LangGraph `interrupt()` on deterministic triggers (`requires_human_approval=True`), sensitive operations, and retry exhaustion.
-   - Resumes seamlessly via `Command(resume=...)` across independent HTTP requests supporting `approve`, `reject`, `modify`, and `take_over`.
-
-6. **Memory & HITL REST APIs**:
-   - **`POST /api/v1/orchestration/run`**: Thread-aware orchestration with automatic `status: "interrupted"` and pending approval details when paused.
-   - **`GET /api/v1/hitl/pending/{thread_id}`**: Inspect pending approval requests, context summary, and escalation reason.
-   - **`POST /api/v1/hitl/resume/{thread_id}`**: Resume interrupted thread with human review decision (`approve`, `reject`, `modify`, `take_over`).
-   - **`POST /api/v1/memory`**: Create a new long-term semantic memory record.
-   - **`GET /api/v1/memory/{id}`**: Get memory item by ID.
-   - **`GET /api/v1/memory`**: List memories for a given scope.
-   - **`POST /api/v1/memory/search`**: Search and rank memories within a scope.
-   - **`POST /api/v1/memory/consolidate`**: Merge semantic duplicates and clean expired TTL records.
-   - **`DELETE /api/v1/memory/{id}`**: Delete a specific memory item.
-   - **`GET /api/v1/memory/stats`**: Retrieve scope and memory type metrics.
-
----
-
-## 🤖 Built-In Tools & Security Hardening
-
-- **Calculator Tool (`calculator`)**:
-  - Uses Python's Abstract Syntax Tree (`ast`) module to safely parse and evaluate arithmetic expressions.
-  - Strictly disallows `eval()` or `exec()`.
-  - Blocks functions, imports, variables, and attribute access.
-  - Enforces power exponent ceilings to prevent CPU/memory exhaustion denial-of-service attacks.
-- **Safe HTTP GET Tool (`http_get`)**:
-  - **SSRF Prevention**: Resolves hostnames before connecting and validates all resolved IP addresses against private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), multicast, and reserved ranges.
-  - **DNS-Rebinding Protection**: Validates every IP resolved from DNS to ensure no attacker-controlled host points to private internal infrastructure.
-  - **Domain Allowlist**: Only permits domains explicitly listed in `ALLOWED_HTTP_DOMAINS` (`httpbin.org`, `api.github.com`).
-  - **Redirect Protection**: Automatic redirects are disabled (`follow_redirects=False`) to prevent redirect-based SSRF.
-  - **Response Size Cap**: Streams response chunks up to `TOOL_HTTP_MAX_SIZE_BYTES` (default 100 KB) and truncates safely.
-
----
-
-## 🛠️ Tech Stack
-
-- **Language**: Python 3.12 baseline (supports Python >=3.11)
-- **Web Framework**: [FastAPI](https://fastapi.tiangolo.com/) (0.110+)
-- **Multi-Agent Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph) (StateGraph & typed state workflows)
-- **ASGI Server**: [Uvicorn](https://www.uvicorn.org/) (standard)
-- **Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/latest/) & [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
-- **LLM Integrations**: [OpenAI Python SDK](https://github.com/openai/openai-python) (for OpenRouter & Groq), [Google GenAI SDK](https://github.com/googleapis/python-genai) (for Gemini)
-- **HTTP Client**: [HTTPX](https://www.python-httpx.org/)
-- **Testing**: [Pytest](https://docs.pytest.org/), [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
-- **Code Quality**: [Ruff](https://astral.sh/ruff)
-- **Infrastructure**: [Docker](https://www.docker.com/), [Docker Compose](https://docs.docker.com/compose/)
-- **Planned Infrastructure**: PostgreSQL 16, Redis 7
-
----
-
-## ⚙️ Local Setup Instructions
+## 🚀 Quickstart & Local Setup
 
 ### 1. Prerequisites
-- Python 3.11, 3.12, or 3.13 installed
+- Python 3.11, 3.12, or 3.13
 - Git
-- Docker and Docker Compose (optional for local running, required for containerized deployment)
 
-### 2. Clone the Repository
+### 2. Installation
 ```bash
+# Clone repository
 git clone https://github.com/Karthik2509-git/multi-agent-orchestration-platform.git
 cd multi-agent-orchestration-platform
-```
 
-### 3. Create and Activate a Virtual Environment
-```bash
-# On Linux/macOS
-python3 -m venv .venv
-source .venv/bin/activate
-
-# On Windows (PowerShell)
+# Create and activate virtual environment
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
 
-### 4. Install Dependencies
-```bash
+# On Linux/macOS:
+source .venv/bin/activate
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+
 # Install runtime and development dependencies
 pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-### 5. Configure Environment Variables
-Copy `.env.example` to `.env`:
+### 3. Configure Environment
 ```bash
 cp .env.example .env
 ```
-Choose your active provider in `.env`:
-```bash
-# Select active provider
-LLM_PROVIDER=openrouter
-
-# OpenRouter (Free-tier models available)
-OPENROUTER_API_KEY=your_key_here
-OPENROUTER_MODEL=openrouter/free
-
-# Or Google Gemini
-# LLM_PROVIDER=gemini
-# GEMINI_API_KEY=your_key_here
-# GEMINI_MODEL=gemini-2.5-flash
-
-# Or Groq
-# LLM_PROVIDER=groq
-# GROQ_API_KEY=your_key_here
-# GROQ_MODEL=llama-3.3-70b-versatile
+By default, `.env.example` is configured for **offline testing**:
+```ini
+LLM_PROVIDER=mock
+MOCK_LLM_RESPONSE="Deterministic mock response for local testing"
+DATABASE_URL=
+CHROMA_PERSIST_DIR=./data/chroma
 ```
+When `DATABASE_URL` is omitted, the platform uses an in-memory `MemorySaver` checkpointer.
 
----
-
-## 🏃 Running the Application
-
-### Local Development Server
-Start the FastAPI application with auto-reload:
+### 4. Run the Development Server
 ```bash
 python -m uvicorn src.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-
-The interactive API documentation will be available at:
+Access the interactive documentation:
 - **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-### Running Single-Agent Task via API
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/agent/run \
-  -H "Content-Type: application/json" \
-  -d '{"task": "Calculate (1000 / 8) + 42"}'
-```
-
-### Running Multi-Agent Orchestration via API
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/orchestration/run \
-  -H "Content-Type: application/json" \
-  -d '{"task": "Analyze Apple revenue expansion and calculate the CAGR from 2021 to 2023"}'
-```
-
-Example multi-agent response:
-```json
-{
-  "task": "Analyze Apple revenue expansion and calculate the CAGR from 2021 to 2023",
-  "answer": "Apple grew revenues from $365.8B in 2021 to $383.3B in 2023. The calculated CAGR across this period is 2.37%...",
-  "agents_used": ["research", "data", "final"],
-  "status": "completed",
-  "execution_time_seconds": 1.742,
-  "metadata": null
-}
-```
-
 ---
 
-## 🧪 Running Tests
+## 🧪 Testing & Verification
 
-Execute the automated test suite with `pytest`:
+The test suite is built for **100% offline determinism** without external network calls or paid API keys.
+
 ```bash
-# Run all 158 tests
-pytest -v
+# Run all 320 automated tests
+pytest tests/
 
-# Run linting check and code formatting verification
+# Run code style and format checks
 ruff check .
 ruff format --check .
 ```
 
-All 158 unit and integration tests run offline with zero external API calls or paid credentials.
+Current test suite status: **320 passed in ~50s** (0 failed, 0 skipped).
+
+*Detailed test organization and methodology are documented in [docs/development/testing.md](docs/development/testing.md).*
 
 ---
 
-## 🐳 Docker Instructions
+## 🐳 Deployment & Operations
 
-### Build the Docker Image
-```bash
-docker build -t multi-agent-orchestration-platform:latest .
-```
+### Container Architecture
+The platform is containerized using a multi-service `docker-compose.yml`:
+- **PostgreSQL 16**: Backs the LangGraph checkpointer via persistent volume `postgres_data`.
+- **Redis 7**: Auxiliary caching service bound to loopback `127.0.0.1:6379`.
+- **Backend API**: Python 3.12-slim non-root container with `/app/data/chroma` mounted to named volume `chroma_data`.
 
-### Run Full Infrastructure with Docker Compose
+### Deployment Verification Script
+To verify an active deployment end-to-end:
 ```bash
-docker compose up -d --build
+python scripts/verify_deployment.py --base-url http://127.0.0.1:8000
 ```
+This script exercises:
+1. Liveness (`GET /health`)
+2. Readiness (`GET /api/v1/health`)
+3. RAG Ingestion & Query
+4. Semantic Memory Storage & Search
+5. Multi-Agent Orchestration Execution
 
-Check service status and health:
-```bash
-docker compose ps
-```
+*Detailed operational guidelines and honest verification boundaries are documented in [docs/operations/deployment.md](docs/operations/deployment.md).*
 
 ---
 
-## 🗺️ Future Development Phases
+## ⚠️ Known Limitations & Boundaries
 
-The platform is engineered iteratively phase-by-phase. Future development will follow this roadmap:
+To ensure complete engineering transparency:
 
-- **Phase 1 — Foundation & Project Architecture** *(Completed)*
-  - Modular project structure, typing, configuration, health endpoints, containerization, and test harnesses.
-- **Phase 2 — LLM Integration & Tool-Calling Agent** *(Completed)*
-  - Unified LLM provider abstraction, tool registry, safe AST calculator, SSRF-hardened HTTP tool, ToolCallingAgent, and REST endpoint.
-- **Phase 2.5 — Multi-Provider LLM Infrastructure** *(Completed)*
-  - Provider-agnostic architecture supporting OpenRouter, Google Gemini, Groq, and Mock with free-tier model support and provider status API.
-- **Phase 3 — Multi-Agent Orchestration with LangGraph** *(Completed)*
-  - LangGraph StateGraph design, SupervisorAgent with strict allowlist routing, specialist worker agents (Research, Data, Code, Final), deterministic loop ceiling, and REST orchestration API.
-- **Phase 4 — MCP Tool Ecosystem** *(Completed)*
-  - Official MCP SDK v2 Client & MCPServer, `MCPToolAdapter`, allowlisting, namespacing, and REST APIs.
-- **Phase 5 — RAG & Knowledge System** *(Completed)*
-  - Document parsing (.txt, .md, .pdf), RecursiveChunker, Local ONNX embeddings (`all-MiniLM-L6-v2`), persistent ChromaVectorStore, BM25 + dense hybrid search with Reciprocal Rank Fusion (RRF), `KnowledgeSearchTool`, and REST APIs.
-- **Phase 6 — Memory & Human-in-the-Loop** *(Completed)*
-  - Persistent working memory (PostgreSQL `AsyncPostgresSaver` / in-memory testing), long-term semantic memory (isolated Chroma `agent_memory`, composite ranking $0.65\text{sim} + 0.25\text{imp} + 0.10\text{recency}$, selective extraction, duplicate consolidation), supervisor memory injection, native LangGraph `interrupt()` approval gates, and thread-aware HITL REST APIs (`GET /api/v1/hitl/pending/{thread_id}`, `POST /api/v1/hitl/resume/{thread_id}`).
-- **Phase 7 — Observability, Guardrails & Evaluation**
-  - OpenTelemetry distributed tracing, LLM cost/latency tracking, security guardrails, and automated evaluation suites.
-- **Phase 8 — Production Deployment & Portfolio Polish**
-  - Production hardening, cloud deployment automation, CI/CD pipelines, and end-to-end multi-agent showcase.
+1. **Docker Runtime Verification**: Container configurations and Compose YAML syntax have been verified. However, live container startup and persistent named volume restart validation on the host machine were not executed during Phase 8 because the Docker Desktop daemon was offline.
+2. **Telemetry Scope**: OpenTelemetry tracing and metrics collection currently operate in process-local mode unless an external OTLP collector endpoint is explicitly configured in `.env`.
+3. **LLM Evaluation Judge**: The automated evaluation framework includes heuristic metrics and an optional LLM-as-a-judge component; the judge is invoked on-demand and is not run on live user traffic.
+4. **Token Cost Modeling**: Token cost estimates are calculated from versioned pricing tables and rely on provider token reporting accuracy.
+5. **Redis Role**: Redis is provisioned in Docker Compose and settings, but the backend does not currently depend on it for critical runtime operations.
+6. **Authentication & Authorization**: The API endpoints currently operate without authentication or RBAC layers.
+7. **No Web Frontend**: The platform is an API-first backend system and does not currently include a web UI.
+8. **Replay Determinism**: When replaying threads with live external LLMs, completions are subject to model nondeterminism unless inputs and tool results are explicitly mocked.
+9. **Security Scope**: Structural guardrails (SSRF filters, AST calculators, call budgets, payload caps) contain execution blasts but do not provide semantic prompt-injection classification.
+
+---
+
+## 🗺️ Future Roadmap
+
+- **Production Observability Backends**: Production observability backends and dashboards, such as OTLP-compatible distributed tracing together with Prometheus/Grafana metrics visualization.
+- **Operator Web Dashboard**: Lightweight web UI for visual inspection of LangGraph state trees, pending HITL approvals, and memory exploration.
+- **Authentication & RBAC**: API key management and OAuth2 JWT authentication layer with granular endpoint permissions.
+- **Cloud Infrastructure Templates**: Terraform configurations and Helm charts for deploying to Kubernetes (EKS / GKE).
+- **Semantic Prompt Guardrails**: Integration of dedicated semantic classifiers for prompt injection and jailbreak detection.
+- **Asynchronous Task Queuing**: Background worker processing using Celery or ARQ backed by the provisioned Redis infrastructure.
+- **Multi-Tenant Memory Isolation**: Hard cryptographic and schema-level isolation for enterprise multi-tenancy.
+
+---
+
+## 📚 Complete Documentation Index
+
+For detailed guides, please explore the `docs/` package:
+
+- [System Architecture Overview](docs/architecture/overview.md)
+- [Runtime Execution Flow & Alternate Branches](docs/architecture/runtime-flow.md)
+- [Component & Subsystem Map](docs/architecture/component-map.md)
+- [Architecture & Sequence Diagrams](docs/architecture/diagrams.md)
+- [REST API Specification](docs/api/overview.md)
+- [Local Development Setup](docs/development/setup.md)
+- [Configuration Reference](docs/development/configuration.md)
+- [Testing Strategy & Verification](docs/development/testing.md)
+- [Deployment & Infrastructure Operations](docs/operations/deployment.md)
+- [Health & Self-Healing Readiness Probes](docs/operations/health-and-readiness.md)
+- [Operational Troubleshooting Guide](docs/operations/troubleshooting.md)
+- [Platform Security Model](docs/security/security-model.md)
+- [Architectural Decision Records (ADRs 001–005)](docs/decisions/)
