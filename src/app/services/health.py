@@ -23,7 +23,7 @@ async def get_readiness_status(settings: Settings) -> Tuple[bool, HealthResponse
     if settings.checkpoint_backend == "postgres":
         from src.app.memory.working_memory import check_postgres_readiness
 
-        is_ready = await check_postgres_readiness()
+        is_ready = await check_postgres_readiness(settings=settings)
 
     status_str = "healthy" if is_ready else "unhealthy"
 

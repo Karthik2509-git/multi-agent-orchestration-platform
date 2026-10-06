@@ -13,6 +13,17 @@ logger = get_logger(__name__)
 
 _global_checkpointer: Optional[BaseCheckpointSaver] = None
 _global_pool: Optional[Any] = None
+_init_lock: Optional[Any] = None
+
+
+def _get_init_lock() -> Any:
+    """Return an asyncio.Lock tied to the active event loop for concurrency-safe initialization."""
+    global _init_lock
+    if _init_lock is None:
+        import asyncio
+
+        _init_lock = asyncio.Lock()
+    return _init_lock
 
 
 async def init_checkpointer(
@@ -30,6 +41,7 @@ async def init_checkpointer(
         _global_checkpointer = MemorySaver()
         return _global_checkpointer
 
+    pool: Optional[Any] = None
     try:
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
         from psycopg_pool import AsyncConnectionPool
@@ -72,12 +84,19 @@ async def init_checkpointer(
             "Failed to initialize PostgreSQL checkpointer: %s",
             e,
         )
+        if pool is not None:
+            try:
+                await pool.close()
+            except Exception:
+                pass
+        _global_pool = None
+        _global_checkpointer = None
         raise RuntimeError(f"Failed to initialize PostgreSQL checkpointer backend: {e}") from e
 
 
 async def close_checkpointer() -> None:
     """Close connection pool and release resources on application shutdown."""
-    global _global_checkpointer, _global_pool
+    global _global_checkpointer, _global_pool, _init_lock
     if _global_pool is not None:
         try:
             logger.info("Closing PostgreSQL checkpointer connection pool.")
@@ -87,6 +106,7 @@ async def close_checkpointer() -> None:
         finally:
             _global_pool = None
     _global_checkpointer = None
+    _init_lock = None
 
 
 async def get_checkpointer(
@@ -108,9 +128,10 @@ async def get_checkpointer(
 
 def reset_checkpointer() -> None:
     """Reset the global checkpointer instance (primarily for testing)."""
-    global _global_checkpointer, _global_pool
+    global _global_checkpointer, _global_pool, _init_lock
     _global_checkpointer = None
     _global_pool = None
+    _init_lock = None
 
 
 def get_connection_pool() -> Optional[Any]:
@@ -129,11 +150,34 @@ def set_connection_pool(
         _global_checkpointer = checkpointer
 
 
-async def check_postgres_readiness(timeout_seconds: float = 2.0) -> bool:
-    """Perform a lightweight PostgreSQL connectivity check using the existing pool."""
-    global _global_pool
+async def check_postgres_readiness(
+    timeout_seconds: float = 2.0,
+    settings: Optional[Settings] = None,
+) -> bool:
+    """Perform a lightweight PostgreSQL connectivity check with self-healing initialization."""
+    global _global_pool, _global_checkpointer
+    app_settings = settings or get_settings()
+
+    if app_settings.checkpoint_backend == "memory":
+        return True
+
+    # If pool is missing, attempt concurrency-safe self-healing initialization
+    if _global_pool is None:
+        lock = _get_init_lock()
+        async with lock:
+            if _global_pool is None:
+                try:
+                    await init_checkpointer(app_settings)
+                except Exception as init_err:
+                    logger.debug(
+                        "PostgreSQL self-healing initialization deferred: %s",
+                        init_err,
+                    )
+                    return False
+
     if _global_pool is None:
         return False
+
     try:
         import asyncio
 
