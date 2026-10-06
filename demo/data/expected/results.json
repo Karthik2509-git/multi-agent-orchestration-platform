@@ -1,0 +1,18 @@
+{
+  "scenario_name": "Project Titan Infrastructure Audit & Capacity Sizing",
+  "project": "Project Titan",
+  "baseline_qps": 1200,
+  "peak_qps": 3600,
+  "worker_capacity_qps": 300,
+  "expected_initial_workers": 12,
+  "replayed_peak_qps": 4800,
+  "expected_replayed_workers": 16,
+  "target_production_site": "Site Alpha",
+  "memory_scope_audit": "infra_audit",
+  "memory_scope_isolated": "finance_audit",
+  "evaluation_expected": {
+    "k": 3,
+    "min_recall": 1.0,
+    "min_mrr": 0.5
+  }
+}

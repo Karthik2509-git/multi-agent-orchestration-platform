@@ -223,6 +223,21 @@ Access the interactive documentation:
 
 ---
 
+## 🎬 Canonical Demo
+
+The repository includes a single canonical demonstration script showcasing the platform's major capabilities as a coherent end-to-end engineering walkthrough, while keeping subsystem boundaries explicit rather than artificially coupling unrelated operations into a single execution. It exercises multi-agent coordination, guarded AST tool execution, hybrid RAG retrieval, semantic memory with scope isolation, Human-in-the-Loop approval gating, OpenTelemetry tracing and telemetry attribute redaction, retrieval evaluation metrics, and time-travel execution replay.
+
+- **Offline & Zero-Cost**: 100% Offline, Deterministic Workflow Verification via the built-in `MockLLMProvider` and mock embeddings (no paid API keys, external networks, or Docker daemon required).
+- **Single Command Execution**:
+  ```bash
+  python scripts/run_demo.py
+  ```
+- **Execution Time**: ~1-2 seconds across all 8 stages with clear pass/fail status.
+
+*Detailed scenario architecture, stage explanations, and reproducibility guidelines are documented in [docs/development/canonical-demo.md](docs/development/canonical-demo.md).*
+
+---
+
 ## 🧪 Testing & Verification
 
 The test suite is built for **100% offline determinism** without external network calls or paid API keys.

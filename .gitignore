@@ -68,7 +68,8 @@ Thumbs.db
 # Docker / local data
 postgres_data/
 redis_data/
-data/
+/data/
 scratch/
 *.log
 logs/
+!demo/data/

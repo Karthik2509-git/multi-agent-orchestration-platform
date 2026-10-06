@@ -16,9 +16,10 @@ Welcome to the technical documentation for the **Multi-Agent AI Orchestration Pl
 - [REST API Specification](api/overview.md) — Comprehensive reference for all 21 URI paths and 24 HTTP operations.
 
 ### 💻 Development & Engineering
+- [Canonical Demonstration & Reproducibility Guide](development/canonical-demo.md) — Single deterministic end-to-end scenario exercising all 8 core platform capabilities.
 - [Local Development Setup](development/setup.md) — Prerequisites, virtual environment setup, mock provider usage, and running locally.
 - [Configuration Reference](development/configuration.md) — Complete inventory of environment variables, settings, and validators.
-- [Testing Strategy & Verification](development/testing.md) — 320 automated test inventory, offline determinism, and linting guidelines.
+- [Testing Strategy & Verification](development/testing.md) — Automated test inventory, offline determinism, and linting guidelines.
 
 ### 🚀 Operations & Deployment
 - [Deployment & Infrastructure](operations/deployment.md) — Docker containerization, Docker Compose architecture, volumes, and deployment verification script.
