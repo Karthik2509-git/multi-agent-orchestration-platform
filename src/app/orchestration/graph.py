@@ -43,12 +43,21 @@ def build_orchestration_graph(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     memory_service: Optional[MemoryService] = None,
     hitl_policy: Optional[EscalationPolicy] = None,
+    tool_registry: Optional[Any] = None,
 ):
-    """Build and compile the multi-agent LangGraph workflow with Memory and HITL."""
+    """Build and compile the multi-agent LangGraph workflow with Memory, HITL, and Tools."""
+    from src.app.tools.registry import ToolRegistry
+
+    registry = tool_registry or ToolRegistry()
+    if http_tool and http_tool.name not in registry:
+        registry.register(http_tool)
+    if calculator and calculator.name not in registry:
+        registry.register(calculator)
+
     supervisor = SupervisorAgent(provider=provider)
-    research_agent = ResearchAgent(provider=provider, http_tool=http_tool)
-    data_agent = DataAgent(provider=provider, calculator=calculator)
-    code_agent = CodeAgent(provider=provider)
+    research_agent = ResearchAgent(provider=provider, http_tool=http_tool, registry=registry)
+    data_agent = DataAgent(provider=provider, calculator=calculator, registry=registry)
+    code_agent = CodeAgent(provider=provider, registry=registry)
     final_agent = FinalAgent(provider=provider)
     policy = hitl_policy or EscalationPolicy()
 

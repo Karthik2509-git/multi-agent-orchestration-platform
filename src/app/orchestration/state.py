@@ -16,3 +16,4 @@ class OrchestrationState(TypedDict, total=False):
     status: str
     metadata: Dict[str, Any]
     memories_used: List[Dict[str, Any]]
+    tool_execution_context: Any

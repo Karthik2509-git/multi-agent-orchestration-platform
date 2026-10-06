@@ -12,6 +12,10 @@ class ToolResult(BaseModel):
     success: bool = Field(description="Whether the tool execution succeeded")
     data: Any = Field(default=None, description="Output data produced by the tool")
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
+    error_category: Optional[str] = Field(
+        default=None,
+        description="Controlled failure category (e.g. budget_exceeded, tool_disabled)",
+    )
 
 
 class BaseTool(ABC):

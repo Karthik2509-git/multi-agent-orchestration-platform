@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.app.agents.base import AgentResult, BaseSpecializedAgent
 from src.app.core.logging import get_logger
@@ -31,9 +31,15 @@ class ResearchAgent(BaseSpecializedAgent):
         self,
         provider: LLMProvider,
         http_tool: Optional[SafeHTTPGetTool] = None,
+        registry: Optional[Any] = None,
     ):
         self.provider = provider
         self.http_tool = http_tool
+        from src.app.tools.registry import ToolRegistry
+
+        self.registry = registry or ToolRegistry()
+        if self.http_tool and self.http_tool.name not in self.registry:
+            self.registry.register(self.http_tool)
 
     async def run(self, task: str, state: OrchestrationState) -> AgentResult:
         """Execute research task, optionally querying permitted URLs if mentioned."""
@@ -46,7 +52,12 @@ class ResearchAgent(BaseSpecializedAgent):
         if url_match and self.http_tool:
             url_to_fetch = url_match.group(0)
             logger.info("ResearchAgent detected URL to inspect: %s", url_to_fetch)
-            tool_res = await self.http_tool.execute(url=url_to_fetch)
+            context = state.get("tool_execution_context")
+            tool_res = await self.registry.execute(
+                self.http_tool.name,
+                {"url": url_to_fetch},
+                context=context,
+            )
             if tool_res.success and isinstance(tool_res.data, dict):
                 retrieved_url = url_to_fetch
                 retrieved_content = tool_res.data.get("content", "")

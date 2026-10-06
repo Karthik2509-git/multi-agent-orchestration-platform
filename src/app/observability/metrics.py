@@ -54,6 +54,8 @@ ALLOWED_TOOL_ERROR_CATEGORIES = {
     "timeout",
     "validation_error",
     "execution_error",
+    "budget_exceeded",
+    "tool_disabled",
     "other",
 }
 
@@ -248,6 +250,10 @@ def categorize_agent_error(error: Any) -> str:
 def categorize_tool_error(error: Any) -> str:
     """Map error into controlled tool error categories."""
     msg = str(error).lower()
+    if "budget" in msg:
+        return "budget_exceeded"
+    if "disabled" in msg:
+        return "tool_disabled"
     if isinstance(error, TimeoutError) or "timeout" in msg:
         return "timeout"
     if "validation" in msg or "argument" in msg or isinstance(error, (ValueError, TypeError)):

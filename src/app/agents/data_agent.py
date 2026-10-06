@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.app.agents.base import AgentResult, BaseSpecializedAgent
 from src.app.core.logging import get_logger
@@ -29,9 +29,15 @@ class DataAgent(BaseSpecializedAgent):
         self,
         provider: LLMProvider,
         calculator: Optional[CalculatorTool] = None,
+        registry: Optional[Any] = None,
     ):
         self.provider = provider
         self.calculator = calculator or CalculatorTool()
+        from src.app.tools.registry import ToolRegistry
+
+        self.registry = registry or ToolRegistry()
+        if self.calculator.name not in self.registry:
+            self.registry.register(self.calculator)
 
     async def run(self, task: str, state: OrchestrationState) -> AgentResult:
         """Execute mathematical and analytical processing for the task."""
@@ -65,7 +71,12 @@ class DataAgent(BaseSpecializedAgent):
             if response.tool_calls:
                 for tc in response.tool_calls:
                     if tc.name == "calculator":
-                        calc_res = await self.calculator.execute(**tc.arguments)
+                        context = state.get("tool_execution_context")
+                        calc_res = await self.registry.execute(
+                            tc.name,
+                            tc.arguments,
+                            context=context,
+                        )
                         val = (
                             calc_res.data.get("result")
                             if isinstance(calc_res.data, dict)

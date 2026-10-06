@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.app.agents.base import AgentResult, BaseSpecializedAgent
 from src.app.core.logging import get_logger
@@ -29,8 +29,11 @@ class CodeAgent(BaseSpecializedAgent):
 
     name: str = "code"
 
-    def __init__(self, provider: LLMProvider):
+    def __init__(self, provider: LLMProvider, registry: Optional[Any] = None):
         self.provider = provider
+        from src.app.tools.registry import ToolRegistry
+
+        self.registry = registry or ToolRegistry()
 
     async def run(self, task: str, state: OrchestrationState) -> AgentResult:
         """Analyze or generate code according to the requested task and prior findings."""
@@ -54,13 +57,41 @@ class CodeAgent(BaseSpecializedAgent):
         ]
 
         try:
-            response = await self.provider.generate(messages=messages)
-            result_text = response.content or "Code agent completed task with no output."
+            tools = self.registry.get_schemas() if self.registry else None
+            response = await self.provider.generate(
+                messages=messages,
+                tools=tools if tools else None,
+            )
+
+            tool_summary = []
+            if response.tool_calls:
+                for tc in response.tool_calls:
+                    context = state.get("tool_execution_context")
+                    t_res = await self.registry.execute(
+                        tc.name,
+                        tc.arguments,
+                        context=context,
+                    )
+                    outcome = t_res.data if t_res.success else t_res.error
+                    tool_summary.append(f"Tool {tc.name}: {outcome}")
+
+            output_parts = []
+            if tool_summary:
+                output_parts.append("Tool outputs:\n" + "\n".join(tool_summary))
+            if response.content:
+                output_parts.append(response.content)
+
+            result_text = (
+                "\n\n".join(output_parts) if output_parts else "Code agent completed task."
+            )
             return AgentResult(
                 agent=self.name,
                 status="success",
                 result=result_text,
-                metadata={"code_execution_attempted": False},
+                metadata={
+                    "code_execution_attempted": False,
+                    "tool_calls_executed": len(tool_summary),
+                },
             )
         except Exception as e:
             logger.error("CodeAgent encountered error: %s", str(e))

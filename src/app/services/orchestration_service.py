@@ -43,6 +43,8 @@ async def run_orchestrated_task(
     memory_service: Optional[MemoryService] = None,
     hitl_policy: Optional[EscalationPolicy] = None,
     extra_metadata: Optional[Dict[str, Any]] = None,
+    tool_context: Optional[Any] = None,
+    tool_registry: Optional[Any] = None,
 ) -> OrchestrationRunResponse:
     """Coordinate end-to-end multi-agent orchestration for a given task with Memory and HITL."""
     active_thread_id = thread_id or str(uuid4())
@@ -73,6 +75,7 @@ async def run_orchestrated_task(
         checkpointer=checkpointer,
         memory_service=memory_service,
         hitl_policy=hitl_policy,
+        tool_registry=tool_registry,
     )
 
     metadata: Dict[str, Any] = {
@@ -81,6 +84,13 @@ async def run_orchestrated_task(
     }
     if extra_metadata:
         metadata.update(extra_metadata)
+
+    from src.app.tools.execution_context import ToolExecutionContext
+
+    active_tool_context = tool_context or ToolExecutionContext(
+        max_tool_calls=settings.max_tool_calls_per_run,
+        consecutive_failure_threshold=settings.tool_failure_disable_threshold,
+    )
 
     initial_state: OrchestrationState = {
         "task": task,
@@ -93,6 +103,7 @@ async def run_orchestrated_task(
         "status": "pending",
         "metadata": metadata,
         "memories_used": [],
+        "tool_execution_context": active_tool_context,
     }
 
     config = {"configurable": {"thread_id": active_thread_id}}

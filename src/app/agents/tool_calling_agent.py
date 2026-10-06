@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.app.core.logging import get_logger
 from src.app.llm.base import LLMProvider
@@ -34,7 +34,11 @@ class ToolCallingAgent:
         self.max_iterations = max_iterations
         self.system_prompt = system_prompt
 
-    async def run(self, task: str) -> AgentRunResponse:
+    async def run(
+        self,
+        task: str,
+        context: Optional[Any] = None,
+    ) -> AgentRunResponse:
         """Run the agent loop until the task is complete or max iterations is reached."""
         start_time = time.perf_counter()
         logger.info("Agent execution started for task: '%s'", task[:100])
@@ -112,7 +116,9 @@ class ToolCallingAgent:
                     logger.info("Tool selected: '%s' with args %s", tc.name, tc.arguments)
                     tool_start = time.perf_counter()
 
-                    tool_result = await self.registry.execute(tc.name, tc.arguments)
+                    tool_result = await self.registry.execute(
+                        tc.name, tc.arguments, context=context
+                    )
                     tool_duration_ms = round((time.perf_counter() - tool_start) * 1000, 2)
 
                     if tool_result.success:

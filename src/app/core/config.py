@@ -1,7 +1,7 @@
 """Application configuration management using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -85,13 +85,47 @@ class Settings(BaseSettings):
     # Agent Settings (Phase 2)
     agent_max_iterations: int = 5
 
-    # Tool Settings (Phase 2)
+    # Tool Settings (Phase 2 & Phase 7 Milestone 3)
     tool_http_timeout: float = 10.0
     tool_http_max_size_bytes: int = 100_000
     allowed_http_domains: Union[List[str], str] = [
         "httpbin.org",
         "api.github.com",
     ]
+    max_tool_calls_per_run: int = 10
+    tool_failure_disable_threshold: int = 3
+    tool_max_input_size_bytes: int = 65_536
+    tool_max_output_size_bytes: int = 1_000_000
+
+    @field_validator("max_tool_calls_per_run", mode="before")
+    @classmethod
+    def validate_max_tool_calls_per_run(cls, v: Any) -> int:
+        val = int(v)
+        if val <= 0:
+            raise ValueError("MAX_TOOL_CALLS_PER_RUN must be positive.")
+        if val > 1000:
+            raise ValueError("MAX_TOOL_CALLS_PER_RUN exceeds maximum allowed ceiling (1000).")
+        return val
+
+    @field_validator("tool_failure_disable_threshold", mode="before")
+    @classmethod
+    def validate_tool_failure_disable_threshold(cls, v: Any) -> int:
+        val = int(v)
+        if val <= 0:
+            raise ValueError("TOOL_FAILURE_DISABLE_THRESHOLD must be positive.")
+        if val > 100:
+            raise ValueError(
+                "TOOL_FAILURE_DISABLE_THRESHOLD exceeds maximum allowed ceiling (100)."
+            )
+        return val
+
+    @field_validator("tool_max_input_size_bytes", "tool_max_output_size_bytes", mode="before")
+    @classmethod
+    def validate_tool_size_limits(cls, v: Any) -> int:
+        val = int(v)
+        if val <= 0:
+            raise ValueError("Tool size limits must be positive.")
+        return val
 
     @field_validator("allowed_http_domains", mode="before")
     @classmethod
