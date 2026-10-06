@@ -1,5 +1,6 @@
 """Multi-agent orchestration graph implementation using LangGraph with Memory and HITL."""
 
+import time
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -16,7 +17,15 @@ from src.app.core.logging import get_logger
 from src.app.hitl.policies import EscalationPolicy
 from src.app.llm.base import LLMProvider
 from src.app.memory.service import MemoryService
-from src.app.observability import set_span_attributes, trace_span
+from src.app.observability import (
+    record_agent_duration,
+    record_agent_execution,
+    record_agent_failure,
+    record_hitl_escalation,
+    record_span_error,
+    set_span_attributes,
+    trace_span,
+)
 from src.app.orchestration.state import OrchestrationState
 from src.app.tools.calculator import CalculatorTool
 from src.app.tools.http_tool import SafeHTTPGetTool
@@ -152,6 +161,7 @@ def build_orchestration_graph(
 
         if should_escalate:
             logger.info("HITL Approval Gate triggered: %s (level: %s)", reason, level.value)
+            record_hitl_escalation(approval_level=level.value, reason=reason)
             findings_summary = list(agent_results.keys())
             interrupt_payload = {
                 "interrupt_id": str(uuid4()),
@@ -227,73 +237,115 @@ def build_orchestration_graph(
         return {"metadata": metadata}
 
     async def research_node(state: OrchestrationState) -> Dict[str, Any]:
+        start_t = time.perf_counter()
         async with trace_span(
             "agent.execute",
             attributes={"agent_name": "research", "step_number": state.get("step_count", 0)},
         ) as span:
-            result = await research_agent.run(state.get("task", ""), state)
-            set_span_attributes(
-                span,
-                {
-                    "status": result.status,
-                    "result_chars": len(result.result) if result.result else 0,
-                },
-            )
-            agent_results = dict(state.get("agent_results", {}))
-            agent_results[result.agent] = result.result
-            agents_used = list(state.get("agents_used", []))
-            if result.agent not in agents_used:
-                agents_used.append(result.agent)
-            return {
-                "agent_results": agent_results,
-                "agents_used": agents_used,
-            }
+            try:
+                result = await research_agent.run(state.get("task", ""), state)
+                duration = time.perf_counter() - start_t
+                record_agent_execution("research", result.status)
+                record_agent_duration("research", duration)
+                if result.status != "success":
+                    record_agent_failure("research", "execution_error")
+                set_span_attributes(
+                    span,
+                    {
+                        "status": result.status,
+                        "result_chars": len(result.result) if result.result else 0,
+                    },
+                )
+                agent_results = dict(state.get("agent_results", {}))
+                agent_results[result.agent] = result.result
+                agents_used = list(state.get("agents_used", []))
+                if result.agent not in agents_used:
+                    agents_used.append(result.agent)
+                return {
+                    "agent_results": agent_results,
+                    "agents_used": agents_used,
+                }
+            except Exception as e:
+                duration = time.perf_counter() - start_t
+                record_agent_execution("research", "error")
+                record_agent_failure("research", e)
+                record_agent_duration("research", duration)
+                record_span_error(span, e)
+                raise
 
     async def data_node(state: OrchestrationState) -> Dict[str, Any]:
+        start_t = time.perf_counter()
         async with trace_span(
             "agent.execute",
             attributes={"agent_name": "data", "step_number": state.get("step_count", 0)},
         ) as span:
-            result = await data_agent.run(state.get("task", ""), state)
-            set_span_attributes(
-                span,
-                {
-                    "status": result.status,
-                    "result_chars": len(result.result) if result.result else 0,
-                },
-            )
-            agent_results = dict(state.get("agent_results", {}))
-            agent_results[result.agent] = result.result
-            agents_used = list(state.get("agents_used", []))
-            if result.agent not in agents_used:
-                agents_used.append(result.agent)
-            return {
-                "agent_results": agent_results,
-                "agents_used": agents_used,
-            }
+            try:
+                result = await data_agent.run(state.get("task", ""), state)
+                duration = time.perf_counter() - start_t
+                record_agent_execution("data", result.status)
+                record_agent_duration("data", duration)
+                if result.status != "success":
+                    record_agent_failure("data", "execution_error")
+                set_span_attributes(
+                    span,
+                    {
+                        "status": result.status,
+                        "result_chars": len(result.result) if result.result else 0,
+                    },
+                )
+                agent_results = dict(state.get("agent_results", {}))
+                agent_results[result.agent] = result.result
+                agents_used = list(state.get("agents_used", []))
+                if result.agent not in agents_used:
+                    agents_used.append(result.agent)
+                return {
+                    "agent_results": agent_results,
+                    "agents_used": agents_used,
+                }
+            except Exception as e:
+                duration = time.perf_counter() - start_t
+                record_agent_execution("data", "error")
+                record_agent_failure("data", e)
+                record_agent_duration("data", duration)
+                record_span_error(span, e)
+                raise
 
     async def code_node(state: OrchestrationState) -> Dict[str, Any]:
+        start_t = time.perf_counter()
         async with trace_span(
             "agent.execute",
             attributes={"agent_name": "code", "step_number": state.get("step_count", 0)},
         ) as span:
-            result = await code_agent.run(state.get("task", ""), state)
-            set_span_attributes(
-                span,
-                {
-                    "status": result.status,
-                    "result_chars": len(result.result) if result.result else 0,
-                },
-            )
-            agent_results = dict(state.get("agent_results", {}))
-            agent_results[result.agent] = result.result
-            agents_used = list(state.get("agents_used", []))
-            if result.agent not in agents_used:
-                agents_used.append(result.agent)
-            return {
-                "agent_results": agent_results,
-                "agents_used": agents_used,
-            }
+            try:
+                result = await code_agent.run(state.get("task", ""), state)
+                duration = time.perf_counter() - start_t
+                record_agent_execution("code", result.status)
+                record_agent_duration("code", duration)
+                if result.status != "success":
+                    record_agent_failure("code", "execution_error")
+                set_span_attributes(
+                    span,
+                    {
+                        "status": result.status,
+                        "result_chars": len(result.result) if result.result else 0,
+                    },
+                )
+                agent_results = dict(state.get("agent_results", {}))
+                agent_results[result.agent] = result.result
+                agents_used = list(state.get("agents_used", []))
+                if result.agent not in agents_used:
+                    agents_used.append(result.agent)
+                return {
+                    "agent_results": agent_results,
+                    "agents_used": agents_used,
+                }
+            except Exception as e:
+                duration = time.perf_counter() - start_t
+                record_agent_execution("code", "error")
+                record_agent_failure("code", e)
+                record_agent_duration("code", duration)
+                record_span_error(span, e)
+                raise
 
     async def final_node(state: OrchestrationState) -> Dict[str, Any]:
         metadata = dict(state.get("metadata", {}))
@@ -318,51 +370,58 @@ def build_orchestration_graph(
                     "metadata": metadata,
                 }
 
+        start_t = time.perf_counter()
         async with trace_span(
             "agent.execute",
             attributes={"agent_name": "final", "step_number": state.get("step_count", 0)},
         ) as agent_span:
-            result = await final_agent.run(state.get("task", ""), state)
-            set_span_attributes(
-                agent_span,
-                {
-                    "status": result.status,
-                    "result_chars": len(result.result) if result.result else 0,
-                },
-            )
-            agents_used = list(state.get("agents_used", []))
-            if result.agent not in agents_used:
-                agents_used.append(result.agent)
+            try:
+                result = await final_agent.run(state.get("task", ""), state)
+                duration = time.perf_counter() - start_t
+                record_agent_execution("final", result.status)
+                record_agent_duration("final", duration)
+                if result.status != "success":
+                    record_agent_failure("final", "execution_error")
+                set_span_attributes(
+                    agent_span,
+                    {
+                        "status": result.status,
+                        "result_chars": len(result.result) if result.result else 0,
+                    },
+                )
+                agents_used = list(state.get("agents_used", []))
+                if result.agent not in agents_used:
+                    agents_used.append(result.agent)
 
-            final_answer = result.result
-            status_val = "completed" if result.status == "success" else "error"
+                final_answer = result.result
+                status_val = "completed" if result.status == "success" else "error"
 
-            will_extract = bool(
-                memory_service and status_val == "completed" and human_decision != "rejected"
-            )
+                will_extract = bool(
+                    memory_service and status_val == "completed" and human_decision != "rejected"
+                )
 
-            async with trace_span(
-                "final.synthesis",
-                attributes={
-                    "status": status_val,
-                    "answer_chars": len(final_answer) if final_answer else 0,
-                    "memory_extraction": will_extract,
-                },
-            ):
-                # Extract and persist long-term memories strictly if memory service is configured,
-                # status is completed, and the workflow was not rejected
-                if will_extract and memory_service:
-                    try:
-                        task = state.get("task", "")
-                        scope_id = metadata.get("scope_id", "default")
-                        await memory_service.extract_and_store_memories(
-                            task=task,
-                            final_answer=final_answer,
-                            agent_results=state.get("agent_results"),
-                            scope_id=scope_id,
-                        )
-                    except Exception as e:
-                        logger.warning("Post-task memory extraction failed: %s", e)
+                async with trace_span(
+                    "final.synthesis",
+                    attributes={
+                        "status": status_val,
+                        "answer_chars": len(final_answer) if final_answer else 0,
+                        "memory_extraction": will_extract,
+                    },
+                ):
+                    # Extract and persist long-term memories if memory service is configured,
+                    # status is completed, and the workflow was not rejected
+                    if will_extract and memory_service:
+                        try:
+                            task = state.get("task", "")
+                            scope_id = metadata.get("scope_id", "default")
+                            await memory_service.extract_and_store_memories(
+                                task=task,
+                                final_answer=final_answer,
+                                agent_results=state.get("agent_results"),
+                                scope_id=scope_id,
+                            )
+                        except Exception as e:
+                            logger.warning("Post-task memory extraction failed: %s", e)
 
                 return {
                     "final_answer": final_answer,
@@ -370,6 +429,13 @@ def build_orchestration_graph(
                     "agents_used": agents_used,
                     "metadata": metadata,
                 }
+            except Exception as e:
+                duration = time.perf_counter() - start_t
+                record_agent_execution("final", "error")
+                record_agent_failure("final", e)
+                record_agent_duration("final", duration)
+                record_span_error(agent_span, e)
+                raise
 
     # Assemble StateGraph
     workflow = StateGraph(OrchestrationState)

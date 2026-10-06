@@ -14,7 +14,14 @@ from src.app.llm.factory import get_llm_provider
 from src.app.memory.service import MemoryService, get_memory_service
 from src.app.memory.working_memory import get_checkpointer
 from src.app.models.schemas.orchestration import OrchestrationRunResponse
-from src.app.observability import record_span_error, set_span_attributes, trace_span
+from src.app.observability import (
+    record_orchestration_duration,
+    record_orchestration_failure,
+    record_orchestration_request,
+    record_span_error,
+    set_span_attributes,
+    trace_span,
+)
 from src.app.orchestration.graph import build_orchestration_graph
 from src.app.orchestration.state import OrchestrationState
 from src.app.tools.calculator import CalculatorTool
@@ -151,6 +158,8 @@ async def run_orchestrated_task(
                         "execution_time_seconds": execution_time,
                     },
                 )
+                record_orchestration_request(status="interrupted")
+                record_orchestration_duration(duration_seconds=execution_time, status="interrupted")
                 return OrchestrationRunResponse(
                     task=task,
                     answer="Execution paused awaiting human review.",
@@ -198,6 +207,12 @@ async def run_orchestrated_task(
                 },
             )
 
+            req_status = "completed" if status_text in ("completed", "success") else "error"
+            record_orchestration_request(status=req_status)
+            record_orchestration_duration(duration_seconds=execution_time, status=req_status)
+            if req_status == "error":
+                record_orchestration_failure("other")
+
             logger.info(
                 "Multi-agent orchestration completed in %.2fs with status '%s'. Agents used: %s",
                 execution_time,
@@ -226,6 +241,9 @@ async def run_orchestrated_task(
                     "execution_time_seconds": execution_time,
                 },
             )
+            record_orchestration_request(status="error")
+            record_orchestration_failure(e)
+            record_orchestration_duration(duration_seconds=execution_time, status="error")
             return OrchestrationRunResponse(
                 task=task,
                 answer=f"Orchestration failed: {str(e)}",

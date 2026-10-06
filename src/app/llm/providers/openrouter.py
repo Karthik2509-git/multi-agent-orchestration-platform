@@ -49,7 +49,12 @@ class OpenRouterLLMProvider(LLMProvider):
 
         import time
 
-        from src.app.observability import record_span_error, set_span_attributes, trace_span
+        from src.app.observability import (
+            record_llm_metrics,
+            record_span_error,
+            set_span_attributes,
+            trace_span,
+        )
 
         formatted_tools = None
         if tools:
@@ -72,7 +77,8 @@ class OpenRouterLLMProvider(LLMProvider):
                     kwargs["tools"] = formatted_tools
 
                 response = await self.client.chat.completions.create(**kwargs)
-                latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                latency_s = time.perf_counter() - start_time
+                latency_ms = round(latency_s * 1000, 2)
                 choice = response.choices[0]
 
                 parsed_tool_calls: List[ToolCall] = []
@@ -99,17 +105,21 @@ class OpenRouterLLMProvider(LLMProvider):
                     "latency_ms": latency_ms,
                     "model": response.model or self.model,
                 }
+                prompt_tokens = None
+                completion_tokens = None
                 if hasattr(response, "usage") and response.usage:
                     if (
                         hasattr(response.usage, "prompt_tokens")
                         and response.usage.prompt_tokens is not None
                     ):
-                        span_updates["llm.prompt_tokens"] = response.usage.prompt_tokens
+                        prompt_tokens = response.usage.prompt_tokens
+                        span_updates["llm.prompt_tokens"] = prompt_tokens
                     if (
                         hasattr(response.usage, "completion_tokens")
                         and response.usage.completion_tokens is not None
                     ):
-                        span_updates["llm.completion_tokens"] = response.usage.completion_tokens
+                        completion_tokens = response.usage.completion_tokens
+                        span_updates["llm.completion_tokens"] = completion_tokens
                     if (
                         hasattr(response.usage, "total_tokens")
                         and response.usage.total_tokens is not None
@@ -118,6 +128,15 @@ class OpenRouterLLMProvider(LLMProvider):
 
                 set_span_attributes(span, span_updates)
 
+                record_llm_metrics(
+                    provider="openrouter",
+                    model=response.model or self.model,
+                    latency_seconds=latency_s,
+                    status="success",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+
                 return LLMResponse(
                     content=choice.message.content,
                     tool_calls=parsed_tool_calls,
@@ -125,7 +144,25 @@ class OpenRouterLLMProvider(LLMProvider):
                     finish_reason=choice.finish_reason or "stop",
                 )
             except OpenAIError as e:
+                latency_s = time.perf_counter() - start_time
                 set_span_attributes(span, {"status": "error"})
                 record_span_error(span, e)
+                record_llm_metrics(
+                    provider="openrouter",
+                    model=self.model,
+                    latency_seconds=latency_s,
+                    status="error",
+                )
                 logger.error("OpenRouter API invocation failed: %s", type(e).__name__)
                 raise RuntimeError(f"OpenRouter service error: {type(e).__name__}") from e
+            except Exception as e:
+                latency_s = time.perf_counter() - start_time
+                set_span_attributes(span, {"status": "error"})
+                record_span_error(span, e)
+                record_llm_metrics(
+                    provider="openrouter",
+                    model=self.model,
+                    latency_seconds=latency_s,
+                    status="error",
+                )
+                raise

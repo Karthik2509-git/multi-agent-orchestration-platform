@@ -1,5 +1,4 @@
-"""Human-in-the-Loop coordination service for inspecting and resuming interrupted threads."""
-
+import time
 from typing import Any, Dict, Optional
 
 from fastapi import Depends
@@ -11,7 +10,11 @@ from src.app.core.logging import get_logger
 from src.app.hitl.models import ApprovalLevel, HITLRequest, HITLResponse
 from src.app.hitl.policies import EscalationPolicy
 from src.app.memory.working_memory import get_checkpointer
-from src.app.observability import trace_span
+from src.app.observability import (
+    record_hitl_approval_latency,
+    record_hitl_decision,
+    trace_span,
+)
 
 logger = get_logger(__name__)
 
@@ -112,10 +115,16 @@ class HITLService:
             "status": "resumed",
         }
 
+        start_time = time.perf_counter()
         # Submit Command to resume graph execution
         async with trace_span("hitl.resume", attributes=resume_attrs):
             command = Command(resume=resume_payload)
             final_state = await graph.ainvoke(command, config=config)
+            latency_s = time.perf_counter() - start_time
+            record_hitl_decision(decision=response.decision.value)
+            record_hitl_approval_latency(
+                decision=response.decision.value, duration_seconds=latency_s
+            )
             return final_state
 
 

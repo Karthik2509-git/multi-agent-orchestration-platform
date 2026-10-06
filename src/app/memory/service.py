@@ -14,6 +14,7 @@ from src.app.memory.interfaces import MemoryStore
 from src.app.memory.models import MemoryRecord, MemorySearchResult, MemoryStats, MemoryType
 from src.app.memory.retrieval import MemoryRetriever
 from src.app.memory.stores.chroma_memory_store import ChromaMemoryStore
+from src.app.observability import record_memory_hits, record_memory_search
 
 logger = get_logger(__name__)
 
@@ -85,13 +86,21 @@ class MemoryService:
     ) -> List[MemorySearchResult]:
         """Search and rank memories using the composite ranking formula."""
         k = top_k or self.settings.memory_default_top_k
-        return await self.retriever.retrieve(
-            query=query,
-            scope_id=scope_id,
-            top_k=k,
-            memory_type=memory_type,
-            filter_metadata=filter_metadata,
-        )
+        try:
+            results = await self.retriever.retrieve(
+                query=query,
+                scope_id=scope_id,
+                top_k=k,
+                memory_type=memory_type,
+                filter_metadata=filter_metadata,
+            )
+            record_memory_search(status="success")
+            record_memory_hits(has_hits=bool(results))
+            return results
+        except Exception:
+            record_memory_search(status="error")
+            record_memory_hits(has_hits=False)
+            raise
 
     async def list_memories(
         self,

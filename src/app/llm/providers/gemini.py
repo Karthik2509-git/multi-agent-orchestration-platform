@@ -148,7 +148,12 @@ class GeminiLLMProvider(LLMProvider):
 
         import time
 
-        from src.app.observability import record_span_error, set_span_attributes, trace_span
+        from src.app.observability import (
+            record_llm_metrics,
+            record_span_error,
+            set_span_attributes,
+            trace_span,
+        )
 
         attrs = {
             "provider": "gemini",
@@ -164,7 +169,8 @@ class GeminiLLMProvider(LLMProvider):
                     contents=contents,
                     config=config,
                 )
-                latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                latency_s = time.perf_counter() - start_time
+                latency_ms = round(latency_s * 1000, 2)
 
                 parsed_tool_calls: List[ToolCall] = []
                 if response.function_calls:
@@ -194,19 +200,32 @@ class GeminiLLMProvider(LLMProvider):
                     "latency_ms": latency_ms,
                     "model": self.model,
                 }
+                prompt_tokens = None
+                completion_tokens = None
                 if hasattr(response, "usage_metadata") and response.usage_metadata:
                     um = response.usage_metadata
                     if hasattr(um, "prompt_token_count") and um.prompt_token_count is not None:
-                        span_updates["llm.prompt_tokens"] = um.prompt_token_count
+                        prompt_tokens = um.prompt_token_count
+                        span_updates["llm.prompt_tokens"] = prompt_tokens
                     if (
                         hasattr(um, "candidates_token_count")
                         and um.candidates_token_count is not None
                     ):
-                        span_updates["llm.completion_tokens"] = um.candidates_token_count
+                        completion_tokens = um.candidates_token_count
+                        span_updates["llm.completion_tokens"] = completion_tokens
                     if hasattr(um, "total_token_count") and um.total_token_count is not None:
                         span_updates["llm.total_tokens"] = um.total_token_count
 
                 set_span_attributes(span, span_updates)
+
+                record_llm_metrics(
+                    provider="gemini",
+                    model=self.model,
+                    latency_seconds=latency_s,
+                    status="success",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
 
                 return LLMResponse(
                     content=response_text,
@@ -216,12 +235,26 @@ class GeminiLLMProvider(LLMProvider):
                 )
 
             except errors.APIError as api_err:
+                latency_s = time.perf_counter() - start_time
                 set_span_attributes(span, {"status": "error"})
                 record_span_error(span, api_err)
+                record_llm_metrics(
+                    provider="gemini",
+                    model=self.model,
+                    latency_seconds=latency_s,
+                    status="error",
+                )
                 logger.error("Gemini API invocation failed: %s", type(api_err).__name__)
                 raise RuntimeError(f"Gemini service error: {type(api_err).__name__}") from api_err
             except Exception as ex:
+                latency_s = time.perf_counter() - start_time
                 set_span_attributes(span, {"status": "error"})
                 record_span_error(span, ex)
+                record_llm_metrics(
+                    provider="gemini",
+                    model=self.model,
+                    latency_seconds=latency_s,
+                    status="error",
+                )
                 logger.error("Unexpected Gemini error: %s", type(ex).__name__)
                 raise RuntimeError(f"Gemini provider error: {str(ex)}") from ex

@@ -2,7 +2,14 @@ import time
 from typing import Any, Dict, List, Optional
 
 from src.app.core.logging import get_logger
-from src.app.observability import record_span_error, set_span_attributes, trace_tool_execution
+from src.app.observability import (
+    record_span_error,
+    record_tool_call,
+    record_tool_failure,
+    record_tool_latency,
+    set_span_attributes,
+    trace_tool_execution,
+)
 from src.app.tools.base import BaseTool, ToolResult
 
 logger = get_logger(__name__)
@@ -72,7 +79,8 @@ class ToolRegistry:
             try:
                 logger.info("Executing tool '%s' with arguments: %s", name, arguments)
                 result = await tool.execute(**arguments)
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                duration_s = time.perf_counter() - start_time
+                duration_ms = round(duration_s * 1000, 2)
                 set_span_attributes(
                     span,
                     {
@@ -80,14 +88,26 @@ class ToolRegistry:
                         "duration_ms": duration_ms,
                     },
                 )
+                tool_status = "success" if result.success else "error"
+                record_tool_call(tool_name=name, tool_type=tool_type, status=tool_status)
+                record_tool_latency(
+                    tool_name=name, tool_type=tool_type, duration_seconds=duration_s
+                )
                 if not result.success:
                     set_span_attributes(span, {"error_category": "tool_failure"})
+                    record_tool_failure(tool_name=name, error=result.error or "execution_error")
                 return result
             except Exception as e:
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                duration_s = time.perf_counter() - start_time
+                duration_ms = round(duration_s * 1000, 2)
                 logger.error("Unhandled exception executing tool '%s': %s", name, str(e))
                 record_span_error(span, e)
                 set_span_attributes(span, {"status": "error", "duration_ms": duration_ms})
+                record_tool_call(tool_name=name, tool_type=tool_type, status="error")
+                record_tool_latency(
+                    tool_name=name, tool_type=tool_type, duration_seconds=duration_s
+                )
+                record_tool_failure(tool_name=name, error=e)
                 return ToolResult(
                     success=False,
                     error=f"Internal error executing tool '{name}': {str(e)}",

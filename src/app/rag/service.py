@@ -103,7 +103,14 @@ class RAGService:
         """Retrieve most relevant chunks for a search query."""
         import time
 
-        from src.app.observability import record_span_error, set_span_attributes, trace_span
+        from src.app.observability import (
+            record_rag_chunks_retrieved,
+            record_rag_latency,
+            record_rag_retrieval,
+            record_span_error,
+            set_span_attributes,
+            trace_span,
+        )
 
         k = top_k or self.settings.rag_default_top_k
         strat = strategy or "hybrid"
@@ -117,7 +124,8 @@ class RAGService:
                     filter_metadata=filter_metadata,
                     strategy=strategy,
                 )
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                duration_s = time.perf_counter() - start_time
+                duration_ms = round(duration_s * 1000, 2)
                 set_span_attributes(
                     span,
                     {
@@ -126,11 +134,17 @@ class RAGService:
                         "duration_ms": duration_ms,
                     },
                 )
+                record_rag_retrieval(strategy=strat, status="success")
+                record_rag_latency(strategy=strat, duration_seconds=duration_s)
+                record_rag_chunks_retrieved(strategy=strat, count=len(results))
                 return results
             except Exception as e:
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                duration_s = time.perf_counter() - start_time
+                duration_ms = round(duration_s * 1000, 2)
                 set_span_attributes(span, {"status": "error", "duration_ms": duration_ms})
                 record_span_error(span, e)
+                record_rag_retrieval(strategy=strat, status="error")
+                record_rag_latency(strategy=strat, duration_seconds=duration_s)
                 raise
 
     async def query(
