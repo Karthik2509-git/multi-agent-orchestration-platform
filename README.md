@@ -90,7 +90,7 @@ graph TD
 | **Relational Storage** | PostgreSQL 16 (`asyncpg`, `psycopg-pool`) | Persistent LangGraph working memory checkpointing |
 | **Caching / Queues** | Redis 7 (configured, non-runtime-critical) | Auxiliary infrastructure cache |
 | **Observability** | OpenTelemetry Python SDK | Distributed tracing, context propagation, span hierarchy |
-| **Testing & Quality** | Pytest, Pytest-Asyncio, AnyIO, Ruff | 320 automated tests, static analysis, code formatting |
+| **Testing & Quality** | Pytest, Pytest-Asyncio, AnyIO, Ruff | 328 automated tests, static analysis, code formatting |
 | **Containerization** | Docker, Docker Compose | Production non-root container and coordinated service stack |
 
 ---
@@ -107,6 +107,11 @@ multi-agent-orchestration-platform/
 ├── requirements.txt              # Pinned production dependencies
 ├── requirements-dev.txt          # Development, testing, and linting dependencies
 ├── README.md                     # Project overview and documentation index
+├── benchmarks/
+│   ├── README.md                 # Benchmark methodology and reproducibility notes
+│   └── results/benchmark_report.json
+├── demo/
+│   └── data/                     # Canonical demo fixtures
 ├── docs/                         # Comprehensive engineering documentation
 │   ├── README.md                 # Documentation navigation index
 │   ├── architecture/             # System overview, runtime flow, component map, diagrams
@@ -116,7 +121,9 @@ multi-agent-orchestration-platform/
 │   ├── security/                 # Threat model, SSRF protection, guardrails, non-goals
 │   └── decisions/                # Architectural Decision Records (ADRs 001–005)
 ├── scripts/
-│   └── verify_deployment.py      # Standalone deployment verification and smoke test script
+│   ├── run_benchmarks.py         # Offline benchmark runner
+│   ├── run_demo.py               # Canonical end-to-end demonstration
+│   └── verify_deployment.py      # Deployment verification and smoke test
 ├── src/
 │   └── app/
 │       ├── main.py               # FastAPI application factory, lifespan, CORS, root routes
