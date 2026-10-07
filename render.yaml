@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: multi-agent-orchestration-platform
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: CHECKPOINT_BACKEND
+        value: memory
+      - key: LLM_PROVIDER
+        value: mock
+      - key: MCP_ENABLED
+        value: "false"
+      - key: MCP_LOCAL_SERVER_ENABLED
+        value: "false"
+      - key: RAG_ENABLED
+        value: "true"
+      - key: RAG_EMBEDDING_PROVIDER
+        value: mock
+      - key: MEMORY_ENABLED
+        value: "true"
+      - key: TELEMETRY_ENABLED
+        value: "true"
+      - key: TELEMETRY_EXPORTER
+        value: memory
+      - key: TELEMETRY_RECORD_PAYLOADS
+        value: "false"
+      - key: CORS_ORIGINS
+        value: "*"
