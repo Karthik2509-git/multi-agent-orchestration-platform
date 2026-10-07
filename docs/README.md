@@ -20,6 +20,7 @@ Welcome to the technical documentation for the **Multi-Agent AI Orchestration Pl
 - [Local Development Setup](development/setup.md) — Prerequisites, virtual environment setup, mock provider usage, and running locally.
 - [Configuration Reference](development/configuration.md) — Complete inventory of environment variables, settings, and validators.
 - [Testing Strategy & Verification](development/testing.md) — Automated test inventory, offline determinism, and linting guidelines.
+- [Benchmark Methodology & Engineering Evidence](development/benchmarks.md) — Deterministic evaluation, invariant verification, local runtime characterization, and cost projections.
 
 ### 🚀 Operations & Deployment
 - [Deployment & Infrastructure](operations/deployment.md) — Docker containerization, Docker Compose architecture, volumes, and deployment verification script.
