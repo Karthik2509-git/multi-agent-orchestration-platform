@@ -693,8 +693,8 @@ def main() -> None:
     parser.add_argument(
         "--output-json",
         type=Path,
-        default=REPO_ROOT / "benchmarks" / "results" / "benchmark_report.json",
-        help="Target filepath for machine-readable JSON output",
+        default=REPO_ROOT / "benchmarks" / "results" / "local" / "benchmark_report.json",
+        help="Target filepath for machine-readable JSON output (defaults to ignored local results)",
     )
     parser.add_argument(
         "--verbose",

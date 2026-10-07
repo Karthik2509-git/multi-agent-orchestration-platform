@@ -73,3 +73,6 @@ scratch/
 *.log
 logs/
 !demo/data/
+
+# Local benchmark reports (machine-specific metadata/timings)
+benchmarks/results/local/

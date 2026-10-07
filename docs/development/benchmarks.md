@@ -1,4 +1,6 @@
 # Platform Benchmarks & Engineering Evidence
+> Local benchmark runs write machine-specific metadata and variable timing results to `benchmarks/results/local/benchmark_report.json` by default. This directory is Git-ignored so running the benchmark does not overwrite the committed reference report.
+
 
 This document establishes the benchmarking architecture, experimental methodologies, reproducibility protocols, and claim boundaries for the **Multi-Agent AI Orchestration Platform**.
 
@@ -28,7 +30,7 @@ scripts/run_benchmarks.py
  └── Suite 5: Token / Cost Modeling Projections (MODEL_PRICING_REGISTRY)
       │
       ▼
- benchmarks/results/benchmark_report.json
+ benchmarks/results/local/benchmark_report.json
 ```
 
 ---
@@ -52,7 +54,7 @@ python scripts/run_benchmarks.py --verbose
 
 ## 4. Environment Metadata
 
-Every execution automatically records reproducibility metadata into `benchmarks/results/benchmark_report.json`:
+Every execution automatically records reproducibility metadata into the generated local report (by default `benchmarks/results/local/benchmark_report.json`):
 
 | Field | Description | Example Value |
 |---|---|---|

@@ -142,7 +142,7 @@ multi-agent-orchestration-platform/
 │       ├── services/             # Cross-cutting business logic services
 │       ├── core/                 # Typed configuration and structured logging
 │       └── models/               # Domain Pydantic schemas and data contracts
-└── tests/                        # 320 automated unit, integration, and E2E tests
+└── tests/                        # 328 automated unit, integration, and E2E tests
 ```
 
 ---
@@ -275,11 +275,13 @@ The platform provides a standalone benchmark runner executing 100% offline with 
 - **Versioned Token-Cost Projection**: Deterministic token expenditure projections using the versioned pricing registry (`MODEL_PRICING_REGISTRY`) under representative canonical workload assumptions.
 
 ```bash
-# Execute complete benchmark suite and generate machine-readable JSON report
+# Execute complete benchmark suite; local machine-specific report is ignored by Git
 python scripts/run_benchmarks.py
 ```
 
-*Detailed methodology, statistical interpretations, and claim boundaries are documented in [docs/development/benchmarks.md](docs/development/benchmarks.md). Machine-readable artifact: [benchmarks/results/benchmark_report.json](benchmarks/results/benchmark_report.json).*
+The committed [benchmark report](benchmarks/results/benchmark_report.json) is a reference fixture. Local executions write machine-specific metadata and timing results to `benchmarks/results/local/benchmark_report.json`, which is intentionally ignored.
+
+*Detailed methodology, statistical interpretations, and claim boundaries are documented in [docs/development/benchmarks.md](docs/development/benchmarks.md).*
 
 ---
 
