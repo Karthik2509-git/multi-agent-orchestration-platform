@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, status
-from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from src.app.api.v1.api import api_v1_router
@@ -105,14 +105,23 @@ def create_app() -> FastAPI:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Multi-Agent AI Orchestration Platform</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.6; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 760px;
+      margin: 4rem auto;
+      padding: 0 1.25rem;
+      line-height: 1.6;
+    }
     a { margin-right: 1rem; }
     code { background: #f3f4f6; padding: .15rem .35rem; border-radius: .25rem; }
   </style>
 </head>
 <body>
   <h1>Multi-Agent AI Orchestration Platform</h1>
-  <p>A FastAPI backend for tool-using, memory-enabled multi-agent workflows with LangGraph, MCP, RAG, HITL, observability, and execution replay.</p>
+  <p>
+    A FastAPI backend for tool-using, memory-enabled multi-agent workflows with
+    LangGraph, MCP, RAG, HITL, observability, and execution replay.
+  </p>
   <p>
     <a href="/docs">Swagger UI</a>
     <a href="/redoc">ReDoc</a>
