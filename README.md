@@ -1,3 +1,5 @@
+[![CI](https://github.com/Karthik2509-git/multi-agent-orchestration-platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Karthik2509-git/multi-agent-orchestration-platform/actions/workflows/ci.yml)
+
 # Multi-Agent AI Orchestration Platform
 
 A production-grade, modular backend system engineered to coordinate specialized autonomous agents, standardized tool ecosystems, hybrid retrieval (RAG), persistent memory, human oversight, and execution replay.
@@ -229,6 +231,26 @@ Access the interactive documentation:
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
 ---
+
+## 🌐 Live API Demo Deployment
+
+The repository includes a Render Blueprint for a public, zero-cost demonstration deployment using the deterministic Mock LLM provider. It exposes the FastAPI service and interactive Swagger UI without requiring paid API keys.
+
+> **Current status:** The blueprint is deployment-ready, but a live public URL is not claimed until the service is created and successfully deployed in a Render account.
+
+### Deploy to Render
+
+1. Open Render and choose **New → Blueprint**.
+2. Connect this repository and select the `main` branch.
+3. Render will read `render.yaml` and create the web service.
+4. Wait for the deployment health check on `/health` to pass.
+5. Open the generated `onrender.com` URL:
+   - `/` — API landing/status
+   - `/health` — liveness
+   - `/docs` — interactive Swagger UI
+   - `/redoc` — ReDoc API documentation
+
+The demo deployment intentionally uses `LLM_PROVIDER=mock`, in-memory checkpointing, mock embeddings, and in-memory telemetry. It is intended for portfolio demonstrations rather than persistent production workloads. Render's free web services can spin down after inactivity and have an ephemeral filesystem, so state should not be treated as durable.
 
 ## 🎬 Canonical Demo
 
