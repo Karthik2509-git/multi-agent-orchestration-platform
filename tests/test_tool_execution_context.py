@@ -335,7 +335,14 @@ async def test_shared_multi_agent_budget():
 
     11th call from any agent is blocked.
     """
-    registry = ToolRegistry()
+    registry = ToolRegistry(
+        mock_tool_results={
+            "http_get": {
+                "success": True,
+                "data": {"content": "Deterministic offline fixture for shared-budget testing."},
+            }
+        }
+    )
     counter_tool = CountingTool()
     registry.register(counter_tool)
 
