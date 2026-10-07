@@ -92,7 +92,7 @@ graph TD
 | **Relational Storage** | PostgreSQL 16 (`asyncpg`, `psycopg-pool`) | Persistent LangGraph working memory checkpointing |
 | **Caching / Queues** | Redis 7 (configured, non-runtime-critical) | Auxiliary infrastructure cache |
 | **Observability** | OpenTelemetry Python SDK | Distributed tracing, context propagation, span hierarchy |
-| **Testing & Quality** | Pytest, Pytest-Asyncio, AnyIO, Ruff | 328 automated tests, static analysis, code formatting |
+| **Testing & Quality** | Pytest, Pytest-Asyncio, AnyIO, Ruff | 331 automated tests, static analysis, code formatting |
 | **Containerization** | Docker, Docker Compose | Production non-root container and coordinated service stack |
 
 ---
@@ -272,7 +272,7 @@ The repository includes a single canonical demonstration script showcasing the p
 The test suite is built for **100% offline determinism** without external network calls or paid API keys.
 
 ```bash
-# Run all 328 automated tests
+# Run all 331 automated tests
 pytest tests/
 
 # Run code style and format checks
@@ -280,7 +280,7 @@ ruff check .
 ruff format --check .
 ```
 
-Current test suite status: **328 passed in ~50s** (0 failed, 0 skipped).
+Current test suite status: **331 passed in ~50s** (0 failed, 0 skipped).
 
 *Detailed test organization and methodology are documented in [docs/development/testing.md](docs/development/testing.md).*
 
