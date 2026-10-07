@@ -7,7 +7,7 @@ from src.app.core.config import Settings
 
 
 def _route_paths(app):
-    return {route.path for route in app.routes}
+    return {route.path for route in app.routes if hasattr(route, "path")}
 
 
 def test_production_docs_are_disabled_by_default(monkeypatch):
