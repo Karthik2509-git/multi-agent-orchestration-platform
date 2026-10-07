@@ -58,7 +58,7 @@ When using `POST /api/v1/orchestration/replay`:
 
 ### 3.2 Semantic Memory Scope Isolation
 - Memories stored in Chroma are partitioned by `scope`: `user`, `agent`, `session`, and `global`.
-- Queries specify scope filters to prevent cross-tenant and cross-user memory leakage.
+- Queries specify scope filters and verify zero cross-scope memory leakage across the tested isolation scenarios.
 
 ### 3.3 Credential Redaction & Telemetry Restrictions
 - API keys (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `POSTGRES_PASSWORD`) are marked as secret fields in Pydantic Settings.
