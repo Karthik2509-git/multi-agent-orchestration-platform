@@ -11,6 +11,8 @@ services:
         value: production
       - key: DEBUG
         value: "false"
+      - key: PUBLIC_DOCS_ENABLED
+        value: "true"
       - key: HOST
         value: 0.0.0.0
       - key: PORT

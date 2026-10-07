@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from src.app.api.v1.api import api_v1_router
@@ -69,8 +70,12 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="Production-grade Multi-Agent AI Orchestration Platform API",
-        docs_url="/docs" if settings.debug or settings.app_env != "production" else None,
-        redoc_url="/redoc" if settings.debug or settings.app_env != "production" else None,
+        docs_url="/docs"
+        if settings.debug or settings.app_env != "production" or settings.public_docs_enabled
+        else None,
+        redoc_url="/redoc"
+        if settings.debug or settings.app_env != "production" or settings.public_docs_enabled
+        else None,
         lifespan=lifespan,
     )
 
@@ -89,6 +94,43 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def root() -> str:
+        """Return a small portfolio-friendly landing page for the API."""
+        return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-Agent AI Orchestration Platform</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 760px;
+      margin: 4rem auto;
+      padding: 0 1.25rem;
+      line-height: 1.6;
+    }
+    a { margin-right: 1rem; }
+    code { background: #f3f4f6; padding: .15rem .35rem; border-radius: .25rem; }
+  </style>
+</head>
+<body>
+  <h1>Multi-Agent AI Orchestration Platform</h1>
+  <p>
+    A FastAPI backend for tool-using, memory-enabled multi-agent workflows with
+    LangGraph, MCP, RAG, HITL, observability, and execution replay.
+  </p>
+  <p>
+    <a href="/docs">Swagger UI</a>
+    <a href="/redoc">ReDoc</a>
+    <a href="/openapi.json">OpenAPI JSON</a>
+    <a href="/health">Health</a>
+  </p>
+  <p>API base: <code>/api/v1</code></p>
+</body>
+</html>"""
 
     # Root health endpoint (delegates to the shared health service)
     @app.get(

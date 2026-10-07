@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_version: str = "0.1.0"
     debug: bool = False
+    public_docs_enabled: bool = False
     log_level: str = "INFO"
     host: str = "0.0.0.0"
     port: int = 8000
